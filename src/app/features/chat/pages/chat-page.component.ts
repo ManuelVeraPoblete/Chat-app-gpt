@@ -35,175 +35,183 @@ import { MessageBubbleComponent } from '../../../shared/ui/message-bubble.compon
     MessageBubbleComponent,
   ],
   template: `
-    <div class="page">
-      <mat-toolbar class="topbar" color="primary">
-        <div class="title">
-          <mat-icon>chat</mat-icon>
-          <div class="texts">
-            <div class="name">Chat IA</div>
-            <div class="sub">
-              @if (model()) { <span>Modelo: {{ model() }}</span> }
-              @if (conversationId()) { <span> • ID: {{ conversationId() }}</span> }
-            </div>
-          </div>
-        </div>
+<div class="chat-page">
 
-        <span class="spacer"></span>
+  <!-- HEADER WhatsApp-like -->
+  <mat-toolbar class="chat-header">
+    <button mat-icon-button aria-label="Volver">
+      <mat-icon>arrow_back</mat-icon>
+    </button>
 
-        <button mat-icon-button matTooltip="Reiniciar conversación" (click)="onClear()">
-          <mat-icon>restart_alt</mat-icon>
-        </button>
-      </mat-toolbar>
+    <app-avatar [isUser]="false"></app-avatar>
 
-      <div class="chat-bg">
-        <div class="messages" #scrollContainer>
-          @for (m of messages(); track m.id) {
-            <div class="row" [class.user]="m.role==='user'" [class.bot]="m.role==='assistant'">
-              @if (m.role === 'assistant') { <app-avatar [isUser]="false" /> }
-
-              <app-message-bubble
-                [text]="m.text"
-                [isUser]="m.role==='user'"
-                [createdAt]="m.createdAt"
-                [status]="m.status"
-              />
-
-              @if (m.role === 'user') { <app-avatar [isUser]="true" /> }
-            </div>
-          }
-        </div>
-      </div>
-
-      <!-- ✅ Enviar estable por submit -->
-      <form class="composer" (ngSubmit)="onSend()" autocomplete="off">
-        <div class="composer-inner">
-          <mat-form-field class="input" appearance="outline">
-            <textarea
-              matInput
-              name="message"
-              rows="1"
-              [(ngModel)]="draft"
-              placeholder="Escribe un mensaje…"
-              [disabled]="loading()"
-              (keydown)="onKeydown($event)"
-            ></textarea>
-          </mat-form-field>
-
-          <button
-            mat-fab
-            color="primary"
-            class="send"
-            type="submit"
-            [disabled]="loading() || !draft.trim()"
-            matTooltip="Enviar"
-          >
-            <mat-icon>send</mat-icon>
-          </button>
-        </div>
-      </form>
+    <div class="header-text">
+      <div class="name">Adam</div>
+      <div class="status">online</div>
     </div>
+
+    <span class="spacer"></span>
+
+    <button mat-icon-button aria-label="Videollamada"><mat-icon>videocam</mat-icon></button>
+    <button mat-icon-button aria-label="Llamada"><mat-icon>call</mat-icon></button>
+
+    <button
+      mat-icon-button
+      matTooltip="Reiniciar conversación"
+      aria-label="Reiniciar"
+      (click)="onClear()">
+      <mat-icon>restart_alt</mat-icon>
+    </button>
+
+    <button mat-icon-button aria-label="Más"><mat-icon>more_vert</mat-icon></button>
+  </mat-toolbar>
+
+  <!-- BODY -->
+  <div class="chat-body" #scrollContainer>
+    <div class="day-separator">TODAY</div>
+
+    <!-- Importante: mantenemos tu señal computed -->
+    <div
+      *ngFor="let m of messages(); trackBy: trackById"
+      class="row"
+      [class.user]="m.role === 'user'">
+
+      <app-message-bubble
+        [text]="m.text"
+        [isUser]="m.role === 'user'"
+        [createdAt]="m.createdAt"
+        [status]="m.status">
+      </app-message-bubble>
+
+    </div>
+  </div>
+
+  <!-- INPUT -->
+  <form class="chat-input" (ngSubmit)="onSend()" autocomplete="off">
+
+    <button mat-icon-button type="button" aria-label="Emoji">
+      <mat-icon>emoji_emotions</mat-icon>
+    </button>
+
+    <!-- Usamos textarea como tu versión original (mejor UX) -->
+    <textarea
+      class="input"
+      name="message"
+      rows="1"
+      [(ngModel)]="draft"
+      placeholder="Type a message"
+      [disabled]="loading()"
+      (keydown)="onKeydown($event)">
+    </textarea>
+
+    <button mat-icon-button type="button" aria-label="Adjuntar">
+      <mat-icon>attach_file</mat-icon>
+    </button>
+
+    <button
+      mat-fab
+      color="primary"
+      class="send-btn"
+      type="submit"
+      [disabled]="loading() || !draft.trim()"
+      matTooltip="Enviar"
+      aria-label="Enviar">
+      <mat-icon>send</mat-icon>
+    </button>
+
+  </form>
+
+</div>
   `,
   styles: [`
-    .page{
-      height: 100dvh;
-      display: grid;
-      grid-template-rows: auto 1fr auto;
-      background: #0b141a;
-    }
+/* CONTENEDOR GENERAL */
+.chat-page{
+  height: 100dvh;
+  display:flex;
+  flex-direction:column;
+  background:#efeae2;
+}
 
-    .topbar{
-      position: sticky;
-      top: 0;
-      z-index: 10;
-    }
+/* HEADER */
+.chat-header{
+  background:#075e54;
+  color:white;
+}
 
-    .title{
-      display:flex; align-items:center; gap: 10px;
-    }
-    .texts .name{ font-weight: 700; }
-    .texts .sub{
-      font-size: 12px;
-      opacity: .85;
-      display:flex;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-    .spacer{ flex: 1; }
+.header-text{ margin-left:10px; }
+.name{ font-weight:600; }
+.status{ font-size:12px; opacity:.85; }
+.spacer{ flex:1; }
 
-    .chat-bg{
-      background:
-        radial-gradient(circle at 20% 0%, rgba(255,255,255,.08), transparent 40%),
-        radial-gradient(circle at 80% 20%, rgba(255,255,255,.06), transparent 45%),
-        #0b141a;
-      overflow: hidden;
-    }
+/* BODY */
+.chat-body{
+  flex:1;
+  padding:12px;
+  overflow:auto;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
 
-    .messages{
-      height: 100%;
-      overflow: auto;
-      padding: 18px 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
+.row{
+  display:flex;
+  justify-content:flex-start;
+}
 
-    .row{
-      display:flex;
-      gap: 10px;
-      align-items: flex-end;
-    }
-    .row.user{ justify-content: flex-end; }
-    .row.bot{ justify-content: flex-start; }
+.row.user{
+  justify-content:flex-end;
+}
 
-    .composer{
-      background: #111b21;
-      padding: 10px 12px;
-      border-top: 1px solid rgba(255,255,255,.06);
-      margin: 0;
-    }
-    .composer-inner{
-      max-width: 980px;
-      margin: 0 auto;
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 10px;
-      align-items: end;
-    }
-    .input{ width: 100%; }
+.day-separator{
+  align-self:center;
+  background:#d5f3ff;
+  color:#444;
+  font-size:12px;
+  padding:4px 10px;
+  border-radius:10px;
+  margin:10px 0;
+}
 
-    /* ✅ Input visible en oscuro */
-    :host ::ng-deep .mat-mdc-text-field-wrapper{
-      background: rgba(255,255,255,.06);
-      border-radius: 10px;
-    }
+/* INPUT */
+.chat-input{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:8px;
+  background:#f0f0f0;
+}
 
-    textarea{
-      color: rgba(255,255,255,.92) !important;
-      caret-color: rgba(255,255,255,.92) !important;
-      resize: none;
-      max-height: 140px;
-      overflow: auto;
-    }
+.input{
+  flex:1;
+  border:none;
+  outline:none;
+  padding:10px 12px;
+  border-radius:20px;
+  background:#fff;
+  font-family: inherit;
+  font-size: 14px;
+  resize:none;
+  line-height: 18px;
+  max-height: 120px;
+  overflow:auto;
+}
 
-    textarea::placeholder{
-      color: rgba(255,255,255,.55);
-    }
-
-    .send{
-      width: 52px;
-      height: 52px;
-    }
+.send-btn{
+  width:44px;
+  height:44px;
+}
   `]
 })
 export class ChatPageComponent implements AfterViewInit {
+
   @ViewChild('scrollContainer') private readonly scrollContainer?: ElementRef<HTMLDivElement>;
 
+  // Texto escrito por el usuario
   draft = '';
 
+  // ✅ Mantener tus señales computed originales (NO romper facade)
   readonly messages = computed(() => this.facade.messages());
   readonly loading = computed(() => this.facade.loading());
-  readonly model = computed(() => this.facade.model());
-  readonly conversationId = computed(() => this.facade.conversationId());
 
   private readonly isBrowser: boolean;
 
@@ -220,7 +228,7 @@ export class ChatPageComponent implements AfterViewInit {
 
   /**
    * Enter envía (bloquea salto de línea).
-   * Shift+Enter deja el salto de línea normal.
+   * Shift+Enter permite salto de línea.
    */
   onKeydown(event: KeyboardEvent): void {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -229,18 +237,28 @@ export class ChatPageComponent implements AfterViewInit {
     }
   }
 
+  /**
+   * ✅ CLAVE: await al facade.send para garantizar que dispare la llamada (stream o http)
+   */
   async onSend(): Promise<void> {
     const text = this.draft.trim();
     if (!text) return;
 
     this.draft = '';
+
+    // ✅ Esto es lo que asegura que realmente ejecute el flujo async
     await this.facade.send(text);
+
     this.scrollToBottom();
   }
 
   onClear(): void {
     this.facade.clearConversation();
     this.scrollToBottom();
+  }
+
+  trackById(_: number, item: { id: string }): string {
+    return item.id;
   }
 
   private scrollToBottom(): void {

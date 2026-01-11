@@ -7,58 +7,78 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
   standalone: true,
   imports: [CommonModule, MatProgressSpinnerModule],
   template: `
-    <div class="bubble" [class.user]="isUser" [class.bot]="!isUser" [class.error]="status==='error'">
-      <div class="text" [innerText]="text"></div>
+<div class="bubble" [class.user]="isUser" [class.error]="status==='error'">
 
-      <div class="meta">
-        <span class="time">{{ createdAt | date:'HH:mm' }}</span>
+  <!-- Texto -->
+  <div class="text" [innerText]="text"></div>
 
-        @if (status === 'sending') {
-          <mat-progress-spinner diameter="14" mode="indeterminate"></mat-progress-spinner>
-        }
-        @if (status === 'error') {
-          <span class="err">Error</span>
-        }
-      </div>
-    </div>
+  <!-- Meta: hora + estado -->
+  <div class="meta">
+    <span class="time">{{ createdAt | date:'HH:mm' }}</span>
+
+    <!-- Mientras llega streaming -->
+    <ng-container *ngIf="status === 'sending'">
+      <mat-progress-spinner diameter="14" mode="indeterminate"></mat-progress-spinner>
+    </ng-container>
+
+    <!-- Error -->
+    <ng-container *ngIf="status === 'error'">
+      <span class="err">Error</span>
+    </ng-container>
+  </div>
+
+</div>
   `,
   styles: [`
-    .bubble{
-      max-width: min(720px, 82%);
-      padding: 10px 12px;
-      border-radius: 14px;
-      line-height: 1.35;
-      box-shadow: 0 1px 0 rgba(0,0,0,.06);
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    .user{
-      background: #d9fdd3; /* WhatsApp-like */
-      border-top-right-radius: 6px;
-    }
-    .bot{
-      background: #fff;
-      border-top-left-radius: 6px;
-    }
-    .error{
-      background: #ffe3e3;
-    }
-    .text{ font-size: 14px; color: #111; }
-    .meta{
-      margin-top: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 8px;
-      opacity: .7;
-      font-size: 11px;
-    }
-    .err{ font-weight: 600; }
+.bubble{
+  max-width:70%;
+  padding:8px 10px;
+  border-radius:8px;
+  background:#ffffff;
+  font-size:14px;
+  position:relative;
+  box-shadow:0 1px 1px rgba(0,0,0,0.05);
+  word-break: break-word;
+}
+
+.bubble.user{
+  background:#dcf8c6;
+}
+
+.bubble.error{
+  background:#ffe3e3;
+}
+
+.text{
+  white-space:pre-wrap;
+}
+
+.meta{
+  margin-top: 4px;
+  display:flex;
+  justify-content:flex-end;
+  align-items:center;
+  gap:6px;
+  opacity:.75;
+}
+
+.time{
+  font-size:11px;
+  color:#666;
+}
+
+.err{
+  font-size:11px;
+  font-weight:600;
+  color:#7a0000;
+}
   `]
 })
 export class MessageBubbleComponent {
   @Input() text = '';
   @Input() isUser = false;
   @Input() createdAt = Date.now();
+
+  // ✅ Mantener status para compatibilidad con el facade
   @Input() status: 'sending' | 'sent' | 'error' | undefined;
 }

@@ -1,0 +1,54 @@
+<div class="chat-page">
+
+  <header class="header">
+    <h2 class="title">Chat</h2>
+
+    <button type="button" class="btn secondary" (click)="clear()">
+      Limpiar
+    </button>
+  </header>
+
+  <section class="messages" aria-label="Mensajes del chat">
+    <!-- ✅ async pipe: la vista se actualiza sola -->
+    <ng-container *ngIf="messages$ | async as messages; else loading">
+      <div *ngIf="messages.length === 0" class="empty">
+        No hay mensajes aún. Escribe algo 👇
+      </div>
+
+      <div
+        *ngFor="let m of messages"
+        class="msg"
+        [class.user]="m.role === 'USER'"
+        [class.assistant]="m.role === 'ASSISTANT'"
+      >
+        <div class="bubble">
+          <div class="meta">
+            <span class="role">{{ m.role }}</span>
+            <span class="time">{{ m.createdAt | date:'shortTime' }}</span>
+          </div>
+
+          <div class="content">{{ m.content }}</div>
+        </div>
+      </div>
+    </ng-container>
+
+    <ng-template #loading>
+      <div class="empty">Cargando…</div>
+    </ng-template>
+  </section>
+
+  <footer class="composer">
+    <input
+      class="input"
+      type="text"
+      placeholder="Escribe tu mensaje…"
+      [(ngModel)]="inputText"
+      (keyup.enter)="send()"
+    />
+
+    <button type="button" class="btn primary" (click)="send()">
+      Enviar
+    </button>
+  </footer>
+
+</div>
