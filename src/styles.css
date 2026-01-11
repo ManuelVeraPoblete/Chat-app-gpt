@@ -1,0 +1,33 @@
+/* You can add global styles to this file, and also import other style files */
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+}
+
+/* Mejora look del mat-form-field en fondo oscuro */
+.mat-mdc-form-field {
+  --mdc-outlined-text-field-outline-color: rgba(255,255,255,.18);
+  --mdc-outlined-text-field-hover-outline-color: rgba(255,255,255,.28);
+  --mdc-outlined-text-field-focus-outline-color: rgba(255,255,255,.35);
+  --mdc-outlined-text-field-label-text-color: rgba(255,255,255,.75);
+  --mdc-outlined-text-field-input-text-color: rgba(255,255,255,.92);
+}
+
+/* Scrollbar discreta */
+*::-webkit-scrollbar { width: 10px; }
+*::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 10px; }
+*::-webkit-scrollbar-track { background: rgba(0,0,0,.2); }
+
+/* ✅ Material input visible en fondo oscuro (global) */
+.mat-mdc-form-field {
+  --mdc-outlined-text-field-input-text-color: rgba(255,255,255,.92);
+  --mdc-outlined-text-field-label-text-color: rgba(255,255,255,.75);
+  --mdc-outlined-text-field-outline-color: rgba(255,255,255,.18);
+  --mdc-outlined-text-field-hover-outline-color: rgba(255,255,255,.28);
+  --mdc-outlined-text-field-focus-outline-color: rgba(255,255,255,.38);
+}
+
+.mat-mdc-input-element::placeholder {
+  color: rgba(255,255,255,.55) !important;
+}
