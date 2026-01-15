@@ -1,53 +1,29 @@
 {
-  "name": "chat-app",
-  "version": "0.0.0",
+  "name": "corpchatapp",
+  "version": "1.0.0",
+  "main": "index.ts",
   "scripts": {
-    "ng": "ng",
-    "start": "ng serve",
-    "build": "ng build",
-    "watch": "ng build --watch --configuration development",
-    "test": "ng test",
-    "serve:ssr:chat-app": "node dist/chat-app/server/server.mjs"
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
   },
-  "prettier": {
-    "printWidth": 100,
-    "singleQuote": true,
-    "overrides": [
-      {
-        "files": "*.html",
-        "options": {
-          "parser": "angular"
-        }
-      }
-    ]
-  },
-  "private": true,
-  "packageManager": "npm@11.6.2",
   "dependencies": {
-    "@angular/animations": "^21.0.7",
-    "@angular/cdk": "^21.0.5",
-    "@angular/common": "^21.0.0",
-    "@angular/compiler": "^21.0.0",
-    "@angular/core": "^21.0.0",
-    "@angular/forms": "^21.0.0",
-    "@angular/material": "^21.0.5",
-    "@angular/platform-browser": "^21.0.0",
-    "@angular/platform-server": "^21.0.0",
-    "@angular/router": "^21.0.0",
-    "@angular/ssr": "^21.0.5",
-    "express": "^5.1.0",
-    "rxjs": "~7.8.0",
-    "tslib": "^2.3.0",
-    "zone.js": "^0.16.0"
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-navigation/native": "^7.1.27",
+    "@react-navigation/native-stack": "^7.9.1",
+    "expo": "~54.0.31",
+    "expo-blur": "~15.0.8",
+    "expo-linear-gradient": "~15.0.8",
+    "expo-status-bar": "~3.0.9",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0"
   },
   "devDependencies": {
-    "@angular/build": "^21.0.5",
-    "@angular/cli": "^21.0.5",
-    "@angular/compiler-cli": "^21.0.0",
-    "@types/express": "^5.0.1",
-    "@types/node": "^20.17.19",
-    "jsdom": "^27.1.0",
-    "typescript": "~5.9.2",
-    "vitest": "^4.0.8"
-  }
+    "@types/react": "~19.1.0",
+    "typescript": "~5.9.2"
+  },
+  "private": true
 }
