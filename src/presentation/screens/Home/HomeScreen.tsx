@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, RefreshControl, SafeAreaView, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { styles } from './HomeScreen.styles';
 import { useApi } from '../../../state/api/ApiContext';
@@ -10,6 +12,10 @@ import { GetUsersUseCase } from '../../../domain/users/usecases/GetUsersUseCase'
 import { HomeHeader } from './components/HomeHeader';
 import { ChatListItem, type ChatRow } from './components/ChatListItem';
 
+import { Routes } from '../../navigation/routes';
+import type { RootStackParamList } from '../../navigation/AppNavigator';
+import { useAuth } from '../../../state/auth/AuthContext';
+
 /**
  * ✅ Regla de negocio solicitada:
  * El primer usuario debe ser exactamente "Asistente Corporativo"
@@ -18,6 +24,16 @@ const FIRST_USER_NAME = 'Asistente Corporativo';
 
 export function HomeScreen() {
   const { http } = useApi();
+
+  /**
+   * ✅ Sesión actual (para ocultar al usuario logueado)
+   */
+  const { session } = useAuth();
+
+  /**
+   * ✅ Navegación tipada
+   */
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [query, setQuery] = useState('');
   const [rows, setRows] = useState<ChatRow[]>([]);
@@ -38,11 +54,18 @@ export function HomeScreen() {
     try {
       const users = await getUsersUseCase.execute();
 
+      const myId = session?.user?.id;
+
       /**
-       * ✅ Convertimos usuarios reales de BD a filas tipo chat
-       * (Por ahora los preview son placeholders)
+       * ✅ Regla solicitada:
+       * ❌ NO mostrar el usuario logueado en la lista
        */
-      const mapped: ChatRow[] = users.map((u) => ({
+      const filteredUsers = myId ? users.filter((u) => u.id !== myId) : users;
+
+      /**
+       * ✅ Convertimos usuarios de BD a filas tipo chat
+       */
+      const mapped: ChatRow[] = filteredUsers.map((u) => ({
         id: u.id,
         email: u.email,
         displayName: u.displayName,
@@ -54,7 +77,7 @@ export function HomeScreen() {
       /**
        * ✅ Ordenar:
        * 1) "Asistente Corporativo" primero
-       * 2) resto alfabético por displayName (es-CL)
+       * 2) resto alfabético por displayName
        */
       const sorted = mapped.sort((a, b) => sortChatRows(a, b));
 
@@ -64,7 +87,7 @@ export function HomeScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [getUsersUseCase]);
+  }, [getUsersUseCase, session?.user?.id]);
 
   useEffect(() => {
     loadUsers();
@@ -84,6 +107,20 @@ export function HomeScreen() {
     });
   }, [query, rows]);
 
+  /**
+   * ✅ Abrir chat del usuario seleccionado
+   */
+  const handleOpenChat = useCallback(
+    (user: ChatRow) => {
+      navigation.navigate(Routes.Chat, {
+        userId: user.id,
+        displayName: user.displayName,
+        email: user.email,
+      });
+    },
+    [navigation]
+  );
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
@@ -98,15 +135,7 @@ export function HomeScreen() {
         <FlatList
           data={filteredRows}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <ChatListItem
-              user={item}
-              onPress={() => {
-                // TODO: abrir ChatScreen con item.id
-                console.log('open chat with', item.id);
-              }}
-            />
-          )}
+          renderItem={({ item }) => <ChatListItem user={item} onPress={() => handleOpenChat(item)} />}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadUsers} />}
           contentContainerStyle={styles.listContent}
         />
@@ -127,7 +156,6 @@ function sortChatRows(a: ChatRow, b: ChatRow): number {
   if (aIsFirst && !bIsFirst) return -1;
   if (!aIsFirst && bIsFirst) return 1;
 
-  // ✅ Orden alfabético por displayName (ignorando mayúsculas/acentos)
   return normalizeText(a.displayName).localeCompare(normalizeText(b.displayName), 'es', {
     sensitivity: 'base',
   });
