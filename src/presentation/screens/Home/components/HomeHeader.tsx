@@ -1,8 +1,11 @@
+// src/presentation/screens/Home/components/HomeHeader.tsx
+
 import React from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import { styles } from './HomeHeader.styles';
 import { AvatarCircle } from './AvatarCircle';
 
@@ -12,12 +15,13 @@ type Props = {
   onChangeQuery: (value: string) => void;
   onPressCamera: () => void;
   onPressNewChat: () => void;
+  onPressLogout: () => void; // ✅ nuevo callback
 };
 
 /**
- * Header estilo WhatsApp (como imagen):
- * ✅ Respeta SafeArea (notch/status bar)
- * ✅ Avatar + buscador + cámara + nuevo chat
+ * Header estilo WhatsApp:
+ * ✅ Respeta SafeArea
+ * ✅ Avatar + buscador + cámara + nuevo chat + logout
  */
 export function HomeHeader({
   currentUserName,
@@ -25,6 +29,7 @@ export function HomeHeader({
   onChangeQuery,
   onPressCamera,
   onPressNewChat,
+  onPressLogout,
 }: Props) {
   const insets = useSafeAreaInsets();
 
@@ -51,6 +56,11 @@ export function HomeHeader({
 
         <Pressable style={styles.iconBtn} onPress={onPressNewChat}>
           <Ionicons name="create-outline" size={26} color="#fff" />
+        </Pressable>
+
+        {/* ✅ Logout: cierra sesión y vuelve al Login */}
+        <Pressable style={styles.iconBtn} onPress={onPressLogout}>
+          <Ionicons name="log-out-outline" size={26} color="#fff" />
         </Pressable>
       </View>
     </View>

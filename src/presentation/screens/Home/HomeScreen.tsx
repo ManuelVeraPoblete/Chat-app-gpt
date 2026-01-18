@@ -1,10 +1,15 @@
+// src/presentation/screens/Home/HomeScreen.tsx
+
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, RefreshControl, SafeAreaView, View } from 'react-native';
+import { Alert, FlatList, RefreshControl,  View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { styles } from './HomeScreen.styles';
 import { useApi } from '../../../state/api/ApiContext';
+import { useAuth } from '../../../state/auth/AuthContext';
 
 import { UsersRepositoryHttp } from '../../../data/users/UsersRepositoryHttp';
 import { GetUsersUseCase } from '../../../domain/users/usecases/GetUsersUseCase';
@@ -14,7 +19,6 @@ import { ChatListItem, type ChatRow } from './components/ChatListItem';
 
 import { Routes } from '../../navigation/routes';
 import type { RootStackParamList } from '../../navigation/AppNavigator';
-import { useAuth } from '../../../state/auth/AuthContext';
 
 /**
  * ✅ Regla de negocio solicitada:
@@ -27,8 +31,9 @@ export function HomeScreen() {
 
   /**
    * ✅ Sesión actual (para ocultar al usuario logueado)
+   * ✅ logout() limpia tokens y session
    */
-  const { session } = useAuth();
+  const { session, logout } = useAuth();
 
   /**
    * ✅ Navegación tipada
@@ -40,7 +45,7 @@ export function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   /**
-   * UseCase (Clean Architecture):
+   * ✅ UseCase (Clean Architecture):
    * UI no sabe de HTTP ni endpoints.
    */
   const getUsersUseCase = useMemo(() => {
@@ -48,6 +53,9 @@ export function HomeScreen() {
     return new GetUsersUseCase(repo);
   }, [http]);
 
+  /**
+   * ✅ Cargar lista de usuarios desde la BD
+   */
   const loadUsers = useCallback(async () => {
     setRefreshing(true);
 
@@ -121,6 +129,25 @@ export function HomeScreen() {
     [navigation]
   );
 
+  /**
+   * ✅ Logout seguro:
+   * - Confirmación
+   * - Limpia sesión/tokens
+   * - AppNavigator detecta session=null y vuelve a Login automáticamente
+   */
+  const handleLogout = useCallback(() => {
+    Alert.alert('Cerrar sesión', '¿Quieres cerrar sesión y entrar con otro usuario?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Cerrar sesión',
+        style: 'destructive',
+        onPress: async () => {
+          await logout();
+        },
+      },
+    ]);
+  }, [logout]);
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
@@ -130,6 +157,7 @@ export function HomeScreen() {
           onChangeQuery={setQuery}
           onPressCamera={() => console.log('camera')}
           onPressNewChat={() => console.log('new chat')}
+          onPressLogout={handleLogout} // ✅ BOTÓN LOGOUT
         />
 
         <FlatList

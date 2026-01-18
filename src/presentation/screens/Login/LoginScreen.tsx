@@ -4,9 +4,9 @@ import {
   ImageBackground,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { styles } from './LoginScreen.styles';
 import { useAuth } from '../../../state/auth/AuthContext';
 import { ChatLogo } from './components/ChatLogo';

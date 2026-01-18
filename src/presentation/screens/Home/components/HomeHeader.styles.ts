@@ -1,3 +1,5 @@
+// src/presentation/screens/Home/components/HomeHeader.styles.ts
+
 import { StyleSheet } from 'react-native';
 
 export const styles = StyleSheet.create({
@@ -6,7 +8,7 @@ export const styles = StyleSheet.create({
     paddingBottom: 12,
     paddingHorizontal: 14,
 
-    // ✅ sombra leve como la imagen
+    // ✅ sombra leve estilo app
     shadowColor: '#0b2b52',
     shadowOpacity: 0.25,
     shadowRadius: 14,
