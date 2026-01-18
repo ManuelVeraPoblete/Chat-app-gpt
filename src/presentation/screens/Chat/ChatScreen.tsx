@@ -1,5 +1,6 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -20,13 +21,26 @@ import { Routes } from '../../navigation/routes';
 import type { RootStackParamList } from '../../navigation/AppNavigator';
 import { AvatarCircle } from '../Home/components/AvatarCircle';
 
+import { useApi } from '../../../state/api/ApiContext';
+import { useAuth } from '../../../state/auth/AuthContext';
+
+import { ChatRepositoryHttp } from '../../../domain/chat/ChatRepositoryHttp';
+
+import { GetChatMessagesUseCase } from '../../../domain/chat/GetChatMessagesUseCase';
+import { SendChatMessageUseCase } from '../../../domain/chat/usecases/SendChatMessageUseCase';
+import type { ChatMessage as ApiChatMessage } from '../../../domain/chat/entities/ChatMessage';
+
 /**
- * ✅ Tipos del chat
+ * ✅ Tipos de navegación
  */
 type ChatRoute = RouteProp<RootStackParamList, typeof Routes.Chat>;
 type ChatNav = NativeStackNavigationProp<RootStackParamList>;
 
-type ChatMessage = {
+/**
+ * ✅ Tipo local para UI.
+ * El backend entrega role/senderId, acá lo simplificamos a 'me' | 'other'.
+ */
+type UiChatMessage = {
   id: string;
   text: string;
   createdAt: Date;
@@ -35,45 +49,134 @@ type ChatMessage = {
 
 /**
  * ✅ ChatScreen (WhatsApp style)
- * - Ajustado a SafeArea
- * - Input queda bien con teclado
- * - Mensajes demo eliminados
- * - ✅ Header sin íconos de llamada/videollamada/menú
+ * - Conecta con API NestJS:
+ *   GET  /chat/:peerId/messages
+ *   POST /chat/:peerId/messages
+ * - Renderiza mensajes del usuario + respuesta del asistente cuando corresponda
  */
 export function ChatScreen() {
   const navigation = useNavigation<ChatNav>();
   const route = useRoute<ChatRoute>();
   const insets = useSafeAreaInsets();
 
-  const { displayName } = route.params;
+  const { http } = useApi();
+  const { session } = useAuth();
 
-  /**
-   * ✅ SIN mensajes demo (arranca vacío)
-   */
-  const initialMessages = useMemo<ChatMessage[]>(() => [], []);
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const { displayName, userId: peerId } = route.params;
+  const myUserId = session?.user?.id ?? '';
+
+  const [messages, setMessages] = useState<UiChatMessage[]>([]);
   const [text, setText] = useState('');
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
   /**
-   * ✅ Enviar mensaje (solo local por ahora)
+   * ✅ UseCases (Clean Architecture):
+   * UI no conoce endpoints, solo casos de uso.
    */
-  const handleSend = useCallback(() => {
-    const value = text.trim();
-    if (!value) return;
+  const chatRepo = useMemo(() => new ChatRepositoryHttp(http), [http]);
+  const getMessagesUseCase = useMemo(() => new GetChatMessagesUseCase(chatRepo), [chatRepo]);
+  const sendMessageUseCase = useMemo(() => new SendChatMessageUseCase(chatRepo), [chatRepo]);
 
-    const newMessage: ChatMessage = {
-      id: String(Date.now()),
+  /**
+   * ✅ Ref para controlar el último mensaje optimista
+   * (evita duplicados cuando el backend retorna el mismo mensaje con un ID real)
+   */
+  const lastOptimisticIdRef = useRef<string | null>(null);
+
+  /**
+   * ✅ Convierte mensaje de API -> UI
+   */
+  const toUiMessage = useCallback(
+    (apiMsg: ApiChatMessage): UiChatMessage => {
+      const createdAt = apiMsg.createdAt ? new Date(apiMsg.createdAt) : new Date();
+      const from = apiMsg.senderId === myUserId ? 'me' : 'other';
+
+      return {
+        id: apiMsg.id,
+        text: apiMsg.text,
+        createdAt,
+        from,
+      };
+    },
+    [myUserId]
+  );
+
+  /**
+   * ✅ Carga historial al entrar a la pantalla
+   */
+  const loadHistory = useCallback(async () => {
+    if (!peerId) return;
+
+    setIsLoadingHistory(true);
+
+    try {
+      const history = await getMessagesUseCase.execute(peerId, 200);
+
+      // Backend devuelve newest-first => ideal para FlatList inverted
+      const ui = (history.messages ?? []).map(toUiMessage);
+
+      setMessages(sortNewestFirst(uniqueById(ui)));
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'No se pudo cargar el historial del chat');
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, [getMessagesUseCase, peerId, toUiMessage]);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
+  /**
+   * ✅ Enviar mensaje a la API
+   * - Inserta optimista el mensaje del usuario
+   * - POST /chat/:peerId/messages
+   * - Inserta los mensajes creados por el backend (incluye assistant si corresponde)
+   */
+  const handleSend = useCallback(async () => {
+    const value = text.trim();
+    if (!value || !peerId) return;
+
+    // ✅ Optimista: aparece altiro
+    const optimisticId = `local-${Date.now()}`;
+    lastOptimisticIdRef.current = optimisticId;
+
+    const optimisticMsg: UiChatMessage = {
+      id: optimisticId,
       text: value,
       createdAt: new Date(),
       from: 'me',
     };
 
-    // ✅ FlatList invertida => insertamos al inicio
-    setMessages((prev) => [newMessage, ...prev]);
+    // FlatList invertida => insertamos al inicio
+    setMessages((prev) => sortNewestFirst(uniqueById([optimisticMsg, ...prev])));
     setText('');
-  }, [text]);
 
-  const renderItem = useCallback(({ item }: { item: ChatMessage }) => {
+    setIsSending(true);
+
+    try {
+      const result = await sendMessageUseCase.execute(peerId, value);
+
+      // Backend devuelve newest-first (assistant + user)
+      const incoming = (result.created ?? []).map(toUiMessage);
+
+      setMessages((prev) => {
+        // ✅ Remueve el optimista para evitar duplicado
+        const withoutOptimistic = prev.filter((m) => m.id !== optimisticId);
+
+        // ✅ Agrega lo que viene del backend (incluye assistant)
+        return sortNewestFirst(uniqueById([...incoming, ...withoutOptimistic]));
+      });
+    } catch (e: any) {
+      // ✅ Si falla, dejamos el optimista visible (útil para debug)
+      Alert.alert('Error', e?.message ?? 'No se pudo enviar el mensaje');
+    } finally {
+      setIsSending(false);
+    }
+  }, [peerId, sendMessageUseCase, text, toUiMessage]);
+
+  const renderItem = useCallback(({ item }: { item: UiChatMessage }) => {
     const isMe = item.from === 'me';
 
     return (
@@ -108,11 +211,11 @@ export function ChatScreen() {
               <Text numberOfLines={1} style={styles.title}>
                 {displayName}
               </Text>
-              <Text style={styles.subtitle}>En línea</Text>
+
+              {/* ✅ Señal simple de estado */}
+              <Text style={styles.subtitle}>{isLoadingHistory ? 'Cargando…' : 'En línea'}</Text>
             </View>
           </View>
-
-          {/* ✅ Eliminado: videollamada, llamada y menú */}
         </View>
 
         {/* ✅ BODY ajustado a teclado */}
@@ -130,7 +233,6 @@ export function ChatScreen() {
             style={styles.messagesList}
             contentContainerStyle={[
               styles.messagesContent,
-              // ✅ si está vacío, centra el placeholder
               messages.length === 0 ? { flexGrow: 1 } : null,
             ]}
             keyboardDismissMode="on-drag"
@@ -138,7 +240,7 @@ export function ChatScreen() {
             ListEmptyComponent={
               <View style={styles.emptyWrap}>
                 <Text style={styles.emptyText}>
-                  Aún no hay mensajes.{'\n'}Escribe el primero 👇
+                  Aún no hay mensajes.{"\n"}Escribe el primero 👇
                 </Text>
               </View>
             }
@@ -169,7 +271,11 @@ export function ChatScreen() {
               </Pressable>
             </View>
 
-            <Pressable style={styles.sendBtn} onPress={handleSend}>
+            <Pressable
+              style={[styles.sendBtn, isSending ? { opacity: 0.7 } : null]}
+              onPress={handleSend}
+              disabled={isSending}
+            >
               <Ionicons name={isEmpty ? 'mic' : 'send'} size={20} color="#fff" />
             </Pressable>
           </View>
@@ -177,4 +283,21 @@ export function ChatScreen() {
       </View>
     </SafeAreaView>
   );
+}
+
+/**
+ * ✅ Helpers
+ */
+function uniqueById(list: UiChatMessage[]): UiChatMessage[] {
+  const map = new Map<string, UiChatMessage>();
+
+  for (const m of list) {
+    if (!map.has(m.id)) map.set(m.id, m);
+  }
+
+  return Array.from(map.values());
+}
+
+function sortNewestFirst(list: UiChatMessage[]): UiChatMessage[] {
+  return [...list].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
