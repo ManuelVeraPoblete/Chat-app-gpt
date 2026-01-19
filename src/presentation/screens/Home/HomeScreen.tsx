@@ -19,6 +19,8 @@ import { ChatListItem, type ChatRow } from './components/ChatListItem';
 
 import { Routes } from '../../navigation/routes';
 import type { RootStackParamList } from '../../navigation/AppNavigator';
+import type { UserListItem } from '../../../types/user.types';
+
 
 /**
  * ✅ Regla de negocio solicitada:
@@ -73,14 +75,25 @@ export function HomeScreen() {
       /**
        * ✅ Convertimos usuarios de BD a filas tipo chat
        */
-      const mapped: ChatRow[] = filteredUsers.map((u) => ({
-        id: u.id,
-        email: u.email,
-        displayName: u.displayName,
-        avatarUrl: u.avatarUrl ?? null,
-        lastMessage: 'Escríbele un mensaje…',
-        lastMessageAt: new Date(),
-      }));
+      const mapped: ChatRow[] = filteredUsers.map((u) => {
+  // ✅ Subtítulo corporativo: Sección • Cargo, si no existe, muestra teléfono.
+  const subtitle =
+    [u.companySection, u.jobTitle].filter(Boolean).join(' • ') ||
+    u.phone ||
+    'Sin información';
+
+  return {
+    id: u.id,
+    email: u.email,
+    displayName: u.displayName,
+    avatarUrl: u.avatarUrl ?? null,
+
+    // ✅ Esta línea ya no será "Escribele un mensaje..."
+    lastMessage: subtitle,
+
+    lastMessageAt: new Date(),
+  };
+});
 
       /**
        * ✅ Ordenar:
@@ -155,8 +168,6 @@ export function HomeScreen() {
           currentUserName="CorpChat"
           query={query}
           onChangeQuery={setQuery}
-          onPressCamera={() => console.log('camera')}
-          onPressNewChat={() => console.log('new chat')}
           onPressLogout={handleLogout} // ✅ BOTÓN LOGOUT
         />
 

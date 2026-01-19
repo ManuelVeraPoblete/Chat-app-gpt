@@ -9,27 +9,27 @@ import { StyleSheet } from 'react-native';
 export const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#d9ecff', // ✅ celeste suave
+    backgroundColor: '#d9ecff',
   },
 
   container: {
     flex: 1,
-    backgroundColor: '#d9ecff', // ✅ celeste suave
+    backgroundColor: '#d9ecff',
   },
 
-  // ✅ Header fijo (el paddingTop se setea dinámico con insets.top)
+  // ✅ Header delgado (SIN height dinámico)
   header: {
-    backgroundColor: '#2b69a6', // ✅ azul suave
+    backgroundColor: '#2b69a6',
     paddingHorizontal: 10,
+    paddingVertical: 8, // ✅ ESTE ES EL CAMBIO IMPORTANTE (lo hace fino)
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
 
     shadowColor: '#0b2b52',
-    shadowOpacity: 0.20,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 }, // ✅ menos sombra vertical
+    elevation: 6,
   },
 
   headerLeft: {
@@ -46,9 +46,9 @@ export const styles = StyleSheet.create({
   },
 
   iconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 34, // ✅ un poco más chico
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -111,7 +111,7 @@ export const styles = StyleSheet.create({
   },
 
   bubbleMe: {
-    backgroundColor: '#cfe7ff', // ✅ celeste suave para "yo"
+    backgroundColor: '#cfe7ff',
     borderTopRightRadius: 6,
     shadowColor: '#000',
     shadowOpacity: 0.06,
@@ -134,7 +134,7 @@ export const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 10,
     paddingTop: 10,
-    backgroundColor: '#d9ecff', // ✅ celeste suave
+    backgroundColor: '#d9ecff',
   },
 
   inputCard: {
@@ -172,14 +172,14 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // ✅ Botón enviar/mic en azul suave
+  // ✅ Botón enviar/mic
   sendBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#2b69a6', // ✅ azul suave
+    backgroundColor: '#2b69a6',
 
     shadowColor: '#0b2b52',
     shadowOpacity: 0.18,

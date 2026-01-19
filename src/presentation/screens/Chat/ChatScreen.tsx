@@ -25,7 +25,6 @@ import { useApi } from '../../../state/api/ApiContext';
 import { useAuth } from '../../../state/auth/AuthContext';
 
 import { ChatRepositoryHttp } from '../../../domain/chat/ChatRepositoryHttp';
-
 import { GetChatMessagesUseCase } from '../../../domain/chat/GetChatMessagesUseCase';
 import { SendChatMessageUseCase } from '../../../domain/chat/usecases/SendChatMessageUseCase';
 import type { ChatMessage as ApiChatMessage } from '../../../domain/chat/entities/ChatMessage';
@@ -52,7 +51,6 @@ type UiChatMessage = {
  * - Conecta con API NestJS:
  *   GET  /chat/:peerId/messages
  *   POST /chat/:peerId/messages
- * - Renderiza mensajes del usuario + respuesta del asistente cuando corresponda
  */
 export function ChatScreen() {
   const navigation = useNavigation<ChatNav>();
@@ -83,6 +81,32 @@ export function ChatScreen() {
    * (evita duplicados cuando el backend retorna el mismo mensaje con un ID real)
    */
   const lastOptimisticIdRef = useRef<string | null>(null);
+
+  /**
+   * ✅ Abrir perfil del usuario con el que estás chateando
+   * - Navega a UserProfileScreen y le pasa userId (peerId)
+   */
+  const openUserProfile = useCallback(() => {
+    if (!peerId) return;
+
+    // ✅ Recuperamos accessToken desde la sesión (según como lo tengas guardado)
+    const accessToken =
+      (session as any)?.accessToken ??
+      (session as any)?.tokens?.accessToken ??
+      (session as any)?.jwt?.accessToken ??
+      '';
+
+    if (!accessToken) {
+      Alert.alert('Sesión', 'Tu sesión expiró. Vuelve a iniciar sesión.');
+      return;
+    }
+
+    navigation.navigate(Routes.UserProfile, {
+      userId: peerId,
+      accessToken,
+      displayName, // opcional para mostrar en el header del perfil
+    });
+  }, [displayName, navigation, peerId, session]);
 
   /**
    * ✅ Convierte mensaje de API -> UI
@@ -169,7 +193,6 @@ export function ChatScreen() {
         return sortNewestFirst(uniqueById([...incoming, ...withoutOptimistic]));
       });
     } catch (e: any) {
-      // ✅ Si falla, dejamos el optimista visible (útil para debug)
       Alert.alert('Error', e?.message ?? 'No se pudo enviar el mensaje');
     } finally {
       setIsSending(false);
@@ -191,28 +214,33 @@ export function ChatScreen() {
   const isEmpty = text.trim().length === 0;
 
   /**
-   * ✅ Header height dinámico según SafeArea
+   * ✅ Header compacto
+   * - SafeAreaView ya aplica el top
+   * - keyboardOffset solo considera header visual
    */
-  const headerHeight = 58 + insets.top;
+  const HEADER_VISUAL_HEIGHT = 52;
+  const keyboardOffset = HEADER_VISUAL_HEIGHT;
 
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
-        {/* ✅ HEADER (solo back + avatar + nombre) */}
-        <View style={[styles.header, { height: headerHeight, paddingTop: insets.top }]}>
+        {/* ✅ HEADER DELGADO */}
+        <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn}>
               <Ionicons name="arrow-back" size={22} color="#fff" />
             </Pressable>
 
-            <AvatarCircle name={displayName} size={36} badge="online" />
+            {/* ✅ Avatar clickeable -> abre perfil */}
+            <Pressable onPress={openUserProfile} hitSlop={12}>
+              <AvatarCircle name={displayName} size={32} badge="online" />
+            </Pressable>
 
             <View style={styles.titleWrap}>
               <Text numberOfLines={1} style={styles.title}>
                 {displayName}
               </Text>
 
-              {/* ✅ Señal simple de estado */}
               <Text style={styles.subtitle}>{isLoadingHistory ? 'Cargando…' : 'En línea'}</Text>
             </View>
           </View>
@@ -222,7 +250,7 @@ export function ChatScreen() {
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? keyboardOffset : 0}
         >
           {/* ✅ MENSAJES */}
           <FlatList

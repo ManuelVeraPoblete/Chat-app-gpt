@@ -1,9 +1,10 @@
 import { StyleSheet } from 'react-native';
 
 /**
- * ✅ Estilos del HomeHeader
- * - Reducimos padding vertical para que NO se vea grueso
- * - Search más bajo
+ * ✅ Header del Chat más delgado
+ * - Menos padding vertical
+ * - Avatar más chico
+ * - Tipografías más compactas
  */
 export const styles = StyleSheet.create({
   header: {
@@ -12,9 +13,18 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
 
     // ✅ esto controla el grosor del header
-    paddingHorizontal: 12,
-    paddingVertical: 8, // 👈 antes seguro estaba mucho más alto
+    paddingHorizontal: 10,
+    paddingVertical: 8, // 👈 antes seguro estaba 14-18
+
     gap: 10,
+  },
+
+  backBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   avatarWrap: {
@@ -36,6 +46,7 @@ export const styles = StyleSheet.create({
   avatarText: {
     fontWeight: '800',
     color: '#1B4E7A',
+    fontSize: 12,
   },
 
   onlineDot: {
@@ -50,33 +61,21 @@ export const styles = StyleSheet.create({
     right: -2,
   },
 
-  searchBox: {
+  textWrap: {
     flex: 1,
-
-    // ✅ más bajo para que el header no crezca
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.20)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    gap: 8,
-  },
-
-  searchInput: {
-    flex: 1,
-    color: '#FFFFFF',
-
-    // ✅ evita que el input infle el alto del header
-    paddingVertical: 0,
-    fontSize: 14,
-  },
-
-  iconBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  title: {
+    fontSize: 16, // ✅ más chico
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+
+  subtitle: {
+    marginTop: 1,
+    fontSize: 12, // ✅ más chico
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.85)',
   },
 });

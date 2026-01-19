@@ -1,68 +1,56 @@
-// src/presentation/screens/Home/components/HomeHeader.tsx
-
 import React from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
 import { styles } from './HomeHeader.styles';
-import { AvatarCircle } from './AvatarCircle';
 
 type Props = {
   currentUserName: string;
   query: string;
-  onChangeQuery: (value: string) => void;
-  onPressCamera: () => void;
-  onPressNewChat: () => void;
-  onPressLogout: () => void; // ✅ nuevo callback
+  onChangeQuery: (text: string) => void;
+
+  /**
+   * ✅ Solo dejamos Logout
+   */
+  onPressLogout: () => void;
 };
 
 /**
- * Header estilo WhatsApp:
- * ✅ Respeta SafeArea
- * ✅ Avatar + buscador + cámara + nuevo chat + logout
+ * HomeHeader
+ * - Header tipo WhatsApp corporativo
+ * - ✅ Más delgado
+ * - ✅ Solo icono Logout
  */
-export function HomeHeader({
-  currentUserName,
-  query,
-  onChangeQuery,
-  onPressCamera,
-  onPressNewChat,
-  onPressLogout,
-}: Props) {
-  const insets = useSafeAreaInsets();
+export function HomeHeader({ currentUserName, query, onChangeQuery, onPressLogout }: Props) {
+  const initial = (currentUserName?.trim()?.[0] ?? 'C').toUpperCase();
 
   return (
-    <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-      <View style={styles.row}>
-        <AvatarCircle name={currentUserName} size={42} badge="online" />
-
-        <View style={styles.searchWrap}>
-          <BlurView intensity={22} tint="light" style={styles.searchBlur}>
-            <TextInput
-              value={query}
-              onChangeText={onChangeQuery}
-              placeholder="Buscar"
-              placeholderTextColor="rgba(255,255,255,0.80)"
-              style={styles.searchInput}
-            />
-          </BlurView>
+    <View style={styles.header}>
+      {/* Avatar del usuario actual */}
+      <View style={styles.avatarWrap}>
+        <View style={styles.avatarCircle}>
+          <Text style={styles.avatarText}>{initial}</Text>
         </View>
 
-        <Pressable style={styles.iconBtn} onPress={onPressCamera}>
-          <Ionicons name="camera-outline" size={26} color="#fff" />
-        </Pressable>
-
-        <Pressable style={styles.iconBtn} onPress={onPressNewChat}>
-          <Ionicons name="create-outline" size={26} color="#fff" />
-        </Pressable>
-
-        {/* ✅ Logout: cierra sesión y vuelve al Login */}
-        <Pressable style={styles.iconBtn} onPress={onPressLogout}>
-          <Ionicons name="log-out-outline" size={26} color="#fff" />
-        </Pressable>
+        {/* Indicador online */}
+        <View style={styles.onlineDot} />
       </View>
+
+      {/* Buscador */}
+      <View style={styles.searchBox}>
+        <Ionicons name="search" size={18} color="#EAF2FF" />
+        <TextInput
+          value={query}
+          onChangeText={onChangeQuery}
+          placeholder="Buscar"
+          placeholderTextColor="#EAF2FF"
+          style={styles.searchInput}
+        />
+      </View>
+
+      {/* ✅ SOLO LOGOUT */}
+      <Pressable style={styles.iconBtn} onPress={onPressLogout}>
+        <Ionicons name="log-out-outline" size={22} color="#FFFFFF" />
+      </Pressable>
     </View>
   );
 }

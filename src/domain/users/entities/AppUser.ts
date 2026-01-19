@@ -7,8 +7,12 @@ export type AppUser = {
   email: string;
   displayName: string;
 
-  /**
-   * Opcional si tu backend devuelve foto.
-   */
+  // opcional si lo usas en UI
   avatarUrl?: string | null;
+
+  // ✅ NUEVO: datos corporativos
+  phone?: string | null;
+  companySection?: string | null;
+  jobTitle?: string | null;
 };
+
