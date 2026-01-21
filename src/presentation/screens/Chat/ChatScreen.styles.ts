@@ -1,10 +1,12 @@
 import { StyleSheet } from 'react-native';
 
 /**
- * ✅ ChatScreen styles (WhatsApp-like)
- * - Header con altura fija (56px) + SafeArea
- * - Sin desbordes por nombres largos
- * - Botones compactos a la derecha
+ * ✅ ChatScreen styles (WhatsApp-like PRO)
+ * Incluye:
+ * ✅ Fondo con patrón (dots)
+ * ✅ Burbuja con colita suave
+ * ✅ Hora dentro de burbuja
+ * ✅ Checks (✅✅) para mensajes enviados
  */
 export const styles = StyleSheet.create({
   safe: {
@@ -14,105 +16,111 @@ export const styles = StyleSheet.create({
 
   container: {
     flex: 1,
-    backgroundColor: '#d9ecff',
+    backgroundColor: 'transparent',
   },
 
   /**
-   * ✅ Header wrapper
-   * - paddingTop se inyecta desde insets.top en el TSX
+   * ✅ Header delgado y estable
    */
   header: {
     width: '100%',
     backgroundColor: '#2b69a6',
-
     shadowColor: '#0b2b52',
-    shadowOpacity: 0.16,
-    shadowRadius: 6,
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
-
-    elevation: 4,
+    elevation: 3,
   },
 
-  /**
-   * ✅ Contenido del header con altura fija (56px)
-   * - Esto es lo que hace que se vea "tipo WhatsApp"
-   */
   headerContent: {
-    height: 56,
+    height: 46,
     paddingHorizontal: 8,
-    paddingBottom: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
 
-  /**
-   * ✅ Lado izquierdo: back + perfil
-   */
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    minWidth: 0, // ✅ clave para permitir encoger con textos largos
-    gap: 4,
+    minWidth: 0,
   },
 
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 6,
   },
 
-  /**
-   * ✅ Área clickeable de perfil
-   */
   headerProfile: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
     minWidth: 0,
-    gap: 10,
-    paddingRight: 6,
   },
 
   headerTitleWrap: {
     flex: 1,
     minWidth: 0,
     justifyContent: 'center',
+    marginLeft: 8,
   },
 
   headerTitle: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     flexShrink: 1,
   },
 
   headerSubtitle: {
     color: '#d7e9ff',
-    fontSize: 12,
-    marginTop: 1,
+    fontSize: 11,
     flexShrink: 1,
   },
 
-  /**
-   * ✅ Lado derecho: iconos compactos
-   */
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
-    marginLeft: 6,
+    flexShrink: 0,
+    flexWrap: 'nowrap',
   },
 
   headerIconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 2,
+  },
+
+  /**
+   * ✅ Body del chat (fondo + patrón)
+   */
+  chatBody: {
+    flex: 1,
+    backgroundColor: '#d9ecff',
+  },
+
+  patternLayer: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    opacity: 0.18,
+    padding: 8,
+  },
+
+  patternDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: '#ffffff',
+    margin: 10,
   },
 
   /**
@@ -121,10 +129,14 @@ export const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 12,
     paddingVertical: 10,
+    paddingBottom: 8,
   },
 
+  /**
+   * ✅ Row de mensaje
+   */
   messageRow: {
-    marginVertical: 4,
+    marginVertical: 6,
     flexDirection: 'row',
   },
 
@@ -136,25 +148,94 @@ export const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
 
-  bubble: {
+  messageStack: {
     maxWidth: '82%',
+    minWidth: 60,
+  },
+
+  stackLeft: {
+    alignItems: 'flex-start',
+  },
+
+  stackRight: {
+    alignItems: 'flex-end',
+  },
+
+  /**
+   * ✅ Burbuja
+   */
+  bubble: {
+    position: 'relative',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingTop: 9,
+    paddingBottom: 6,
     borderRadius: 14,
   },
 
   bubbleMe: {
     backgroundColor: '#2b69a6',
-    borderTopRightRadius: 4,
   },
 
   bubbleOther: {
     backgroundColor: '#ffffff',
-    borderTopLeftRadius: 4,
   },
 
+  /**
+   * ✅ Colita suave (usamos un cuadradito rotado + un "corte" redondo)
+   * Esto da un efecto curvo muy parecido a WhatsApp.
+   */
+  tailBaseLeft: {
+    position: 'absolute',
+    left: -6,
+    bottom: 10,
+    width: 12,
+    height: 12,
+    backgroundColor: '#ffffff',
+    transform: [{ rotate: '45deg' }],
+    borderRadius: 3,
+  },
+
+  tailBaseRight: {
+    position: 'absolute',
+    right: -6,
+    bottom: 10,
+    width: 12,
+    height: 12,
+    backgroundColor: '#2b69a6',
+    transform: [{ rotate: '45deg' }],
+    borderRadius: 3,
+  },
+
+  /**
+   * ✅ "Corte" para suavizar la colita (simula curva)
+   * Color igual al fondo del chat.
+   */
+  tailCutLeft: {
+    position: 'absolute',
+    left: -2,
+    bottom: 6,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#d9ecff',
+  },
+
+  tailCutRight: {
+    position: 'absolute',
+    right: -2,
+    bottom: 6,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#d9ecff',
+  },
+
+  /**
+   * ✅ Texto del mensaje
+   */
   messageText: {
     fontSize: 14,
+    lineHeight: 18,
   },
 
   messageTextMe: {
@@ -166,15 +247,42 @@ export const styles = StyleSheet.create({
   },
 
   /**
-   * ✅ Barra input inferior
+   * ✅ Footer dentro de la burbuja (hora + checks)
+   */
+  bubbleFooter: {
+    marginTop: 6,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 6,
+  },
+
+  timeInBubble: {
+    fontSize: 11,
+    opacity: 0.85,
+  },
+
+  timeInBubbleMe: {
+    color: 'rgba(255,255,255,0.85)',
+  },
+
+  timeInBubbleOther: {
+    color: 'rgba(11,43,82,0.55)',
+  },
+
+  checkIconMe: {
+    opacity: 0.9,
+  },
+
+  /**
+   * ✅ Input bar
    */
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingTop: 10,
     backgroundColor: '#cfe6ff',
-    gap: 10,
   },
 
   input: {
@@ -196,6 +304,7 @@ export const styles = StyleSheet.create({
     backgroundColor: '#2b69a6',
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 10,
   },
 
   sendBtnDisabled: {

@@ -21,7 +21,14 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+
+      /**
+       * ✅ CLAVE PARA CHAT (Android):
+       * Hace que la pantalla se "achique" cuando aparece el teclado,
+       * evitando que se monte encima del input.
+       */
+      "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
       "favicon": "./assets/favicon.png"

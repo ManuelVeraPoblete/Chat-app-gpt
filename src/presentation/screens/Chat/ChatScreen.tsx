@@ -16,6 +16,8 @@ import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useFocusPolling } from '../../../shared/hooks/useFocusPolling';
+import { useKeyboard } from '../../../shared/hooks/useKeyboard';
+
 import { styles } from './ChatScreen.styles';
 import { Routes } from '../../navigation/routes';
 import type { RootStackParamList } from '../../navigation/AppNavigator';
@@ -36,29 +38,34 @@ type ChatRoute = RouteProp<RootStackParamList, typeof Routes.Chat>;
 type ChatNav = NativeStackNavigationProp<RootStackParamList>;
 
 /**
- * ✅ Tipo local para UI.
- * El backend entrega role/senderId, acá lo simplificamos a 'me' | 'other'.
+ * ✅ Estado visual del envío (solo para mensajes tuyos)
+ */
+type SendStatus = 'sending' | 'delivered';
+
+/**
+ * ✅ Tipo local para UI
  */
 type UiChatMessage = {
   id: string;
   text: string;
   createdAt: Date;
   from: 'me' | 'other';
+
+  /**
+   * ✅ Solo aplica a "me"
+   * - sending: muestra reloj
+   * - delivered: muestra doble check ✅✅
+   */
+  status?: SendStatus;
 };
 
-/**
- * ✅ ChatScreen (WhatsApp style)
- * - GET  /chat/:peerId/messages
- * - POST /chat/:peerId/messages
- *
- * Incluye:
- * ✅ Auto-refresh con polling mientras la pantalla está activa (sin websockets)
- * ✅ Header compacto estilo WhatsApp
- */
+const HEADER_HEIGHT = 46;
+
 export function ChatScreen() {
   const navigation = useNavigation<ChatNav>();
   const route = useRoute<ChatRoute>();
   const insets = useSafeAreaInsets();
+  const keyboard = useKeyboard();
 
   const { http } = useApi();
   const { session } = useAuth();
@@ -73,25 +80,34 @@ export function ChatScreen() {
 
   /**
    * ✅ UseCases (Clean Architecture)
-   * UI no conoce endpoints, solo casos de uso.
    */
   const chatRepo = useMemo(() => new ChatRepositoryHttp(http), [http]);
   const getMessagesUseCase = useMemo(() => new GetChatMessagesUseCase(chatRepo), [chatRepo]);
   const sendMessageUseCase = useMemo(() => new SendChatMessageUseCase(chatRepo), [chatRepo]);
 
-  /**
-   * ✅ Ref para controlar el último mensaje optimista
-   * (evita duplicados cuando el backend retorna el mismo mensaje con un ID real)
-   */
   const lastOptimisticIdRef = useRef<string | null>(null);
 
   /**
-   * ✅ Abrir perfil del usuario con el que estás chateando
+   * ✅ Fondo con patrón (dots)
+   * - Sin imágenes externas
+   */
+  const PatternBackground = useCallback(() => {
+    const dots = Array.from({ length: 280 }); // ✅ performance-friendly
+    return (
+      <View style={styles.patternLayer} pointerEvents="none">
+        {dots.map((_, i) => (
+          <View key={`dot-${i}`} style={styles.patternDot} />
+        ))}
+      </View>
+    );
+  }, []);
+
+  /**
+   * ✅ Abrir perfil del usuario del chat
    */
   const openUserProfile = useCallback(() => {
     if (!peerId) return;
 
-    // ✅ Recuperamos accessToken desde la sesión (según como lo tengas guardado)
     const accessToken =
       (session as any)?.accessToken ??
       (session as any)?.tokens?.accessToken ??
@@ -111,25 +127,28 @@ export function ChatScreen() {
   }, [peerId, session, navigation, displayName, route.params.email]);
 
   /**
-   * ✅ Convertir mensaje API -> UI
+   * ✅ Convertir API -> UI
    */
   const toUiMessage = useCallback(
     (apiMsg: ApiChatMessage): UiChatMessage => {
       const createdAt = apiMsg.createdAt ? new Date(apiMsg.createdAt) : new Date();
-      const from = apiMsg.senderId === myUserId ? 'me' : 'other';
+      const isMe = apiMsg.senderId === myUserId;
 
       return {
         id: apiMsg.id,
         text: apiMsg.text,
         createdAt,
-        from,
+        from: isMe ? 'me' : 'other',
+
+        // ✅ Historial / backend => consideramos entregado
+        status: isMe ? 'delivered' : undefined,
       };
     },
     [myUserId]
   );
 
   /**
-   * ✅ Carga historial al entrar a la pantalla
+   * ✅ Cargar historial
    */
   const loadHistory = useCallback(async () => {
     if (!peerId) return;
@@ -138,10 +157,9 @@ export function ChatScreen() {
 
     try {
       const history = await getMessagesUseCase.execute(peerId, 200);
-
-      // ✅ Backend devuelve newest-first => ideal para FlatList inverted
       const ui = (history.messages ?? []).map(toUiMessage);
-      setMessages(sortNewestFirst(uniqueById(ui)));
+
+      setMessages(sortNewestFirst(uniqueByIdPreferDelivered(ui)));
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'No se pudo cargar el historial del chat');
     } finally {
@@ -154,21 +172,17 @@ export function ChatScreen() {
   }, [loadHistory]);
 
   /**
-   * ✅ Auto-refresh del chat (SIN WebSocket)
-   * - Trae mensajes cada X ms SOLO cuando la pantalla está enfocada
-   * - Mezcla mensajes nuevos sin duplicar
+   * ✅ Polling de mensajes (sin WebSockets)
    */
   const isRefreshingRef = useRef(false);
 
   const fetchLatestMessages = useCallback(async (): Promise<UiChatMessage[]> => {
     if (!peerId) return [];
-
-    // ✅ Evita llamadas concurrentes
     if (isRefreshingRef.current) return [];
+
     isRefreshingRef.current = true;
 
     try {
-      // ✅ Traemos últimos 50 mensajes para detectar nuevos
       const latest = await getMessagesUseCase.execute(peerId, 50);
       return (latest.messages ?? []).map(toUiMessage);
     } catch {
@@ -180,7 +194,7 @@ export function ChatScreen() {
 
   useFocusPolling<UiChatMessage[]>({
     enabled: Boolean(peerId),
-    intervalMs: 1000, // ✅ Puedes bajar a 800 si lo quieres más instantáneo
+    intervalMs: 1000,
     fetcher: fetchLatestMessages,
     onData: (latestUi) => {
       if (!latestUi.length) return;
@@ -188,19 +202,15 @@ export function ChatScreen() {
       setMessages((prev) => {
         const existingIds = new Set(prev.map((m) => m.id));
         const onlyNew = latestUi.filter((m) => !existingIds.has(m.id));
-
         if (!onlyNew.length) return prev;
 
-        return sortNewestFirst(uniqueById([...onlyNew, ...prev]));
+        return sortNewestFirst(uniqueByIdPreferDelivered([...onlyNew, ...prev]));
       });
     },
   });
 
   /**
-   * ✅ Enviar mensaje
-   * - Inserta optimista
-   * - Envía al backend
-   * - Inserta lo retornado por backend (incluye assistant)
+   * ✅ Enviar mensaje (optimista)
    */
   const handleSend = useCallback(async () => {
     const value = text.trim();
@@ -214,26 +224,29 @@ export function ChatScreen() {
       text: value,
       createdAt: new Date(),
       from: 'me',
+      status: 'sending', // ✅ reloj mientras llega respuesta
     };
 
-    // ✅ FlatList invertida => insertamos al inicio
-    setMessages((prev) => sortNewestFirst(uniqueById([optimisticMsg, ...prev])));
+    setMessages((prev) => sortNewestFirst(uniqueByIdPreferDelivered([optimisticMsg, ...prev])));
     setText('');
-
     setIsSending(true);
 
     try {
       const result = await sendMessageUseCase.execute(peerId, value);
 
       // ✅ Backend devuelve newest-first (assistant + user)
-      const incoming = (result.created ?? []).map(toUiMessage);
+      const incoming = (result.created ?? []).map((m: ApiChatMessage) => {
+        const ui = toUiMessage(m);
+
+        // ✅ todo lo que venga del backend se considera delivered
+        if (ui.from === 'me') ui.status = 'delivered';
+        return ui;
+      });
 
       setMessages((prev) => {
-        // ✅ Remueve el optimista para evitar duplicado
+        // ✅ Remueve optimista y agrega lo real
         const withoutOptimistic = prev.filter((m) => m.id !== optimisticId);
-
-        // ✅ Agrega lo que viene del backend
-        return sortNewestFirst(uniqueById([...incoming, ...withoutOptimistic]));
+        return sortNewestFirst(uniqueByIdPreferDelivered([...incoming, ...withoutOptimistic]));
       });
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'No se pudo enviar el mensaje');
@@ -243,19 +256,64 @@ export function ChatScreen() {
   }, [peerId, sendMessageUseCase, text, toUiMessage]);
 
   /**
-   * ✅ Render mensaje
-   * - Texto blanco cuando es burbuja azul (me)
-   * - Texto oscuro cuando es burbuja blanca (other)
+   * ✅ Render mensaje:
+   * ✅ colita suave
+   * ✅ hora dentro
+   * ✅ check ✅✅ / reloj
    */
   const renderItem = useCallback(({ item }: { item: UiChatMessage }) => {
     const isMe = item.from === 'me';
 
     return (
       <View style={[styles.messageRow, isMe ? styles.messageRight : styles.messageLeft]}>
-        <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
-          <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextOther]}>
-            {item.text}
-          </Text>
+        <View style={[styles.messageStack, isMe ? styles.stackRight : styles.stackLeft]}>
+          <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
+            {/* ✅ Colita suave */}
+            {isMe ? (
+              <>
+                <View style={styles.tailBaseRight} />
+                <View style={styles.tailCutRight} />
+              </>
+            ) : (
+              <>
+                <View style={styles.tailBaseLeft} />
+                <View style={styles.tailCutLeft} />
+              </>
+            )}
+
+            {/* ✅ Texto */}
+            <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextOther]}>
+              {item.text}
+            </Text>
+
+            {/* ✅ Footer dentro de burbuja */}
+            <View style={styles.bubbleFooter}>
+              <Text
+                style={[
+                  styles.timeInBubble,
+                  isMe ? styles.timeInBubbleMe : styles.timeInBubbleOther,
+                ]}
+              >
+                {formatTime(item.createdAt)}
+              </Text>
+
+              {/* ✅ Checks solo para mensajes tuyos */}
+              {isMe && (
+                <>
+                  {item.status === 'sending' ? (
+                    <Ionicons name="time-outline" size={14} color="rgba(255,255,255,0.85)" />
+                  ) : (
+                    <Ionicons
+                      name="checkmark-done"
+                      size={16}
+                      color="rgba(255,255,255,0.90)"
+                      style={styles.checkIconMe}
+                    />
+                  )}
+                </>
+              )}
+            </View>
+          </View>
         </View>
       </View>
     );
@@ -263,32 +321,42 @@ export function ChatScreen() {
 
   const isEmpty = text.trim().length === 0;
 
+  /**
+   * ✅ iOS offset teclado (top + header)
+   */
+  const keyboardOffset = Platform.OS === 'ios' ? insets.top + HEADER_HEIGHT : 0;
+
+  /**
+   * ✅ ANDROID FIX:
+   * Empujar el contenido cuando aparece el teclado (Android físico)
+   */
+  const androidKeyboardPadding = Platform.OS === 'android' && keyboard.isVisible ? keyboard.height : 0;
+
+  const inputBottomPadding = Math.max(insets.bottom, 10);
+
+  const RootContainer = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
+  const rootProps =
+    Platform.OS === 'ios'
+      ? { behavior: 'padding' as const, keyboardVerticalOffset: keyboardOffset }
+      : {};
+
   return (
     <SafeAreaView style={styles.safe}>
-      {/* ✅ Header compacto estilo WhatsApp */}
+      {/* ✅ Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <View style={styles.headerLeft}>
-            <Pressable
-              onPress={() => navigation.goBack()}
-              style={styles.backBtn}
-              hitSlop={10}
-            >
+            <Pressable onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={10}>
               <Ionicons name="chevron-back" size={22} color="#fff" />
             </Pressable>
 
-            <Pressable
-              onPress={openUserProfile}
-              style={styles.headerProfile}
-              hitSlop={6}
-            >
-              <AvatarCircle size={34} name={displayName} />
+            <Pressable onPress={openUserProfile} style={styles.headerProfile} hitSlop={6}>
+              <AvatarCircle size={30} name={displayName} />
 
               <View style={styles.headerTitleWrap}>
                 <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
                   {displayName}
                 </Text>
-
                 <Text style={styles.headerSubtitle} numberOfLines={1} ellipsizeMode="tail">
                   En línea
                 </Text>
@@ -312,44 +380,46 @@ export function ChatScreen() {
         </View>
       </View>
 
-      {/* ✅ Lista de mensajes */}
-      <View style={styles.container}>
-        <FlatList
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          inverted
-          contentContainerStyle={styles.listContent}
-          refreshing={isLoadingHistory}
-          onRefresh={loadHistory}
-          keyboardShouldPersistTaps="handled"
-        />
+      {/* ✅ Contenido */}
+      <RootContainer style={{ flex: 1 }} {...(rootProps as any)}>
+        <View style={[styles.chatBody, { paddingBottom: androidKeyboardPadding }]}>
+          {/* ✅ Patrón */}
+          <PatternBackground />
 
-        {/* ✅ Input */}
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
-        >
-          <View style={styles.inputBar}>
-            <TextInput
-              value={text}
-              onChangeText={setText}
-              placeholder="Escribe un mensaje..."
-              placeholderTextColor="#6b6b6b"
-              style={styles.input}
-              multiline
+          <View style={styles.container}>
+            <FlatList
+              data={messages}
+              keyExtractor={(item) => item.id}
+              renderItem={renderItem}
+              inverted
+              contentContainerStyle={styles.listContent}
+              refreshing={isLoadingHistory}
+              onRefresh={loadHistory}
+              keyboardShouldPersistTaps="handled"
             />
 
-            <Pressable
-              onPress={handleSend}
-              disabled={isEmpty || isSending}
-              style={[styles.sendBtn, (isEmpty || isSending) && styles.sendBtnDisabled]}
-            >
-              <Ionicons name="send" size={18} color="#fff" />
-            </Pressable>
+            {/* ✅ Input */}
+            <View style={[styles.inputBar, { paddingBottom: inputBottomPadding }]}>
+              <TextInput
+                value={text}
+                onChangeText={setText}
+                placeholder="Escribe un mensaje..."
+                placeholderTextColor="#6b6b6b"
+                style={styles.input}
+                multiline
+              />
+
+              <Pressable
+                onPress={handleSend}
+                disabled={isEmpty || isSending}
+                style={[styles.sendBtn, (isEmpty || isSending) && styles.sendBtnDisabled]}
+              >
+                <Ionicons name="send" size={18} color="#fff" />
+              </Pressable>
+            </View>
           </View>
-        </KeyboardAvoidingView>
-      </View>
+        </View>
+      </RootContainer>
     </SafeAreaView>
   );
 }
@@ -357,16 +427,49 @@ export function ChatScreen() {
 /**
  * ✅ Helpers
  */
-function uniqueById(list: UiChatMessage[]): UiChatMessage[] {
+function uniqueByIdPreferDelivered(list: UiChatMessage[]): UiChatMessage[] {
   const map = new Map<string, UiChatMessage>();
 
-  for (const m of list) {
-    if (!map.has(m.id)) map.set(m.id, m);
+  for (const msg of list) {
+    const existing = map.get(msg.id);
+    if (!existing) {
+      map.set(msg.id, msg);
+      continue;
+    }
+
+    // ✅ Prioridad de estado: delivered > sending
+    const merged = mergeStatus(existing, msg);
+    map.set(msg.id, merged);
   }
 
   return Array.from(map.values());
 }
 
+function mergeStatus(a: UiChatMessage, b: UiChatMessage): UiChatMessage {
+  // Si alguno no es "me", devolalls el más completo
+  if (a.from !== 'me' && b.from !== 'me') return a;
+
+  const rank = (s?: SendStatus) => (s === 'delivered' ? 2 : s === 'sending' ? 1 : 0);
+
+  // Preferimos el que tenga status más alto
+  const best = rank(b.status) > rank(a.status) ? b : a;
+
+  return {
+    ...a,
+    ...b,
+    status: best.status,
+  };
+}
+
 function sortNewestFirst(list: UiChatMessage[]): UiChatMessage[] {
   return [...list].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+/**
+ * ✅ Hora en formato HH:mm (ej: 12:35)
+ */
+function formatTime(date: Date): string {
+  const h = String(date.getHours()).padStart(2, '0');
+  const m = String(date.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
 }
