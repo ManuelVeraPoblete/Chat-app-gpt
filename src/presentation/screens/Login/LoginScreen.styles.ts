@@ -1,12 +1,18 @@
 import { StyleSheet } from 'react-native';
 
 /**
- * Estilos para fondo con imagen + overlay + layout centrado.
+ * ✅ Estilos del LoginScreen (idéntico a la imagen)
+ * - Overlay azul corporativo
+ * - Título grande centrado
+ * - Labels en blanco
+ * - Inputs alineados
+ * - Link "Forgot Password?" a la derecha
+ * - Botón grande separado del formulario
  */
 export const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#000', // fallback mientras carga la imagen
+    backgroundColor: '#0b2f5a', // ✅ fallback mientras carga la imagen
   },
 
   bg: {
@@ -14,61 +20,97 @@ export const styles = StyleSheet.create({
   },
 
   /**
-   * Overlay para asegurar que los inputs glass y textos se lean bien.
-   * Ajusta opacity si tu imagen es más oscura o más clara.
+   * ✅ Overlay azul suave (como el mock)
+   * Ajusta alpha si tu background se ve muy oscuro o muy claro.
    */
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 60, 140, 0.18)',
+    backgroundColor: 'rgba(10, 86, 170, 0.55)',
   },
 
   keyboard: {
     flex: 1,
   },
 
-  content: {
+  /**
+   * ✅ Layout general
+   * - Header arriba
+   * - Form debajo
+   */
+  container: {
     flex: 1,
-    paddingHorizontal: 24,
-    justifyContent: 'center',
-    gap: 26,
+    paddingHorizontal: 26,
+    paddingTop: 14,
+    paddingBottom: 40,
+  },
+
+  /**
+   * ✅ Header centrado
+   */
+  header: {
+    alignItems: 'center',
+    marginTop: 10,
   },
 
   logoWrap: {
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 14,
+    transform: [{ scale: 1.08 }], // ✅ leve aumento visual del ícono
   },
 
+  title: {
+    fontSize: 46,
+    fontWeight: '800',
+    color: '#ffffff',
+    letterSpacing: 0.3,
+  },
+
+  /**
+   * ✅ Form
+   */
   form: {
-    gap: 16,
-    alignItems: 'center',
+    marginTop: 38,
   },
 
-  // “Light streaks” decorativos (opcional)
-  streak: {
-    position: 'absolute',
-    width: 2,
-    height: 240,
-    backgroundColor: 'rgba(255,255,255,0.35)',
-    borderRadius: 2,
-    opacity: 0.35,
+  label: {
+    color: 'rgba(255,255,255,0.95)',
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 10,
   },
-  streak1: {
-    top: 40,
-    left: 40,
-    transform: [{ rotate: '35deg' }],
+
+  labelSpacingTop: {
+    marginTop: 22,
   },
-  streak2: {
-    top: 80,
-    right: 25,
-    height: 290,
-    opacity: 0.25,
-    transform: [{ rotate: '35deg' }],
+
+  /**
+   * ✅ Envoltura para asegurar ancho consistente
+   */
+  fieldWrap: {
+    width: '100%',
   },
-  streak3: {
-    bottom: 40,
-    right: 60,
-    height: 220,
-    opacity: 0.18,
-    transform: [{ rotate: '35deg' }],
+
+  /**
+   * ✅ Forgot Password
+   */
+  forgotWrap: {
+    alignSelf: 'flex-end',
+    marginTop: 12,
+    marginBottom: 24,
+    paddingVertical: 4,
+  },
+
+  forgotText: {
+    color: 'rgba(230,245,255,0.95)',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  /**
+   * ✅ Botón grande (centrado)
+   */
+  buttonWrap: {
+    marginTop: 6,
+    alignItems: 'center',
   },
 });

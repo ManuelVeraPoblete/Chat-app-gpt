@@ -30,7 +30,7 @@ export function GradientButton({ title, onPress, disabled, loading }: Props) {
         accessibilityLabel={title}
       >
         <LinearGradient
-          colors={['#67d6ff', '#1e79ff']}
+          colors={['#35606f', '#474a4f']}
           start={{ x: 0.2, y: 0.1 }}
           end={{ x: 0.9, y: 0.9 }}
           style={styles.gradient}

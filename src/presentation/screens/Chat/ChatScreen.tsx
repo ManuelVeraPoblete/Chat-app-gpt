@@ -2,12 +2,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   FlatList,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,35 +37,30 @@ import type { ChatMessage as ApiChatMessage } from '../../../domain/chat/entitie
 type ChatRoute = RouteProp<RootStackParamList, typeof Routes.Chat>;
 type ChatNav = NativeStackNavigationProp<RootStackParamList>;
 
-/**
- * ✅ Estado visual del envío (solo para mensajes tuyos)
- */
 type SendStatus = 'sending' | 'delivered';
 
-/**
- * ✅ Tipo local para UI
- */
 type UiChatMessage = {
   id: string;
   text: string;
   createdAt: Date;
   from: 'me' | 'other';
-
-  /**
-   * ✅ Solo aplica a "me"
-   * - sending: muestra reloj
-   * - delivered: muestra doble check ✅✅
-   */
   status?: SendStatus;
 };
 
-const HEADER_HEIGHT = 46;
+/**
+ * ✅ Guard para Android (barra emoji / sugerencias / GIF)
+ * Si queda un mini gap, bájalo a 30.
+ * Si aún se tapa, súbelo a 55.
+ */
+const ANDROID_EMOJI_BAR_GUARD = 44;
 
 export function ChatScreen() {
   const navigation = useNavigation<ChatNav>();
   const route = useRoute<ChatRoute>();
+
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboard();
+  const { height: windowHeight } = useWindowDimensions();
 
   const { http } = useApi();
   const { session } = useAuth();
@@ -79,20 +74,67 @@ export function ChatScreen() {
   const [isSending, setIsSending] = useState(false);
 
   /**
-   * ✅ UseCases (Clean Architecture)
+   * ✅ Para que la lista no quede debajo del input absoluto
+   */
+  const [composerHeight, setComposerHeight] = useState(72);
+
+  /**
+   * ✅ Detectar altura base (sin teclado)
+   */
+  const baseHeightRef = useRef(windowHeight);
+
+  useEffect(() => {
+    if (!keyboard.isVisible) {
+      baseHeightRef.current = windowHeight;
+    }
+  }, [keyboard.isVisible, windowHeight]);
+
+  /**
+   * ✅ Si Android ya está haciendo resize real, no necesitamos mover con bottom
+   */
+  const isSystemResizing =
+    keyboard.isVisible && windowHeight < baseHeightRef.current - 80;
+
+  /**
+   * ✅ Altura real del teclado (incluye barras raras)
+   * - height: a veces NO incluye barra emojis
+   * - screenY: es más confiable => baseHeight - screenY
+   */
+  const heightByScreenY = keyboard.screenY
+    ? Math.max(0, baseHeightRef.current - keyboard.screenY)
+    : 0;
+
+  const effectiveKeyboardHeight = Math.max(keyboard.height, heightByScreenY);
+
+  /**
+   * ✅ Offset final del input
+   * - si overlay: subimos input con altura del teclado (+ guard emoji bar)
+   * - si resize real: bottom 0
+   */
+  const keyboardOffset =
+    keyboard.isVisible && !isSystemResizing
+      ? effectiveKeyboardHeight + (Platform.OS === 'android' ? ANDROID_EMOJI_BAR_GUARD : 0)
+      : 0;
+
+  /**
+   * ✅ Bottom cuando NO hay teclado
+   */
+  const safeBottom = Math.max(insets.bottom, 10);
+
+  const composerBottom = keyboard.isVisible ? keyboardOffset : safeBottom;
+
+  /**
+   * ✅ UseCases
    */
   const chatRepo = useMemo(() => new ChatRepositoryHttp(http), [http]);
   const getMessagesUseCase = useMemo(() => new GetChatMessagesUseCase(chatRepo), [chatRepo]);
   const sendMessageUseCase = useMemo(() => new SendChatMessageUseCase(chatRepo), [chatRepo]);
 
-  const lastOptimisticIdRef = useRef<string | null>(null);
-
   /**
    * ✅ Fondo con patrón (dots)
-   * - Sin imágenes externas
    */
   const PatternBackground = useCallback(() => {
-    const dots = Array.from({ length: 280 }); // ✅ performance-friendly
+    const dots = Array.from({ length: 280 });
     return (
       <View style={styles.patternLayer} pointerEvents="none">
         {dots.map((_, i) => (
@@ -103,31 +145,19 @@ export function ChatScreen() {
   }, []);
 
   /**
-   * ✅ Abrir perfil del usuario del chat
+   * ✅ Abrir perfil usuario
    */
   const openUserProfile = useCallback(() => {
     if (!peerId) return;
-
-    const accessToken =
-      (session as any)?.accessToken ??
-      (session as any)?.tokens?.accessToken ??
-      (session as any)?.jwt?.accessToken ??
-      '';
-
-    if (!accessToken) {
-      Alert.alert('Sesión', 'Tu sesión expiró. Vuelve a iniciar sesión.');
-      return;
-    }
-
-    navigation.navigate(Routes.UserProfile, {
+    navigation.navigate(Routes.UserProfile as any, {
       userId: peerId,
       displayName,
       email: route.params.email,
-    } as any);
-  }, [peerId, session, navigation, displayName, route.params.email]);
+    });
+  }, [peerId, navigation, displayName, route.params.email]);
 
   /**
-   * ✅ Convertir API -> UI
+   * ✅ Convert API -> UI
    */
   const toUiMessage = useCallback(
     (apiMsg: ApiChatMessage): UiChatMessage => {
@@ -139,8 +169,6 @@ export function ChatScreen() {
         text: apiMsg.text,
         createdAt,
         from: isMe ? 'me' : 'other',
-
-        // ✅ Historial / backend => consideramos entregado
         status: isMe ? 'delivered' : undefined,
       };
     },
@@ -158,7 +186,6 @@ export function ChatScreen() {
     try {
       const history = await getMessagesUseCase.execute(peerId, 200);
       const ui = (history.messages ?? []).map(toUiMessage);
-
       setMessages(sortNewestFirst(uniqueByIdPreferDelivered(ui)));
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'No se pudo cargar el historial del chat');
@@ -172,7 +199,7 @@ export function ChatScreen() {
   }, [loadHistory]);
 
   /**
-   * ✅ Polling de mensajes (sin WebSockets)
+   * ✅ Polling (sin WS)
    */
   const isRefreshingRef = useRef(false);
 
@@ -217,14 +244,13 @@ export function ChatScreen() {
     if (!value || !peerId) return;
 
     const optimisticId = `local-${Date.now()}`;
-    lastOptimisticIdRef.current = optimisticId;
 
     const optimisticMsg: UiChatMessage = {
       id: optimisticId,
       text: value,
       createdAt: new Date(),
       from: 'me',
-      status: 'sending', // ✅ reloj mientras llega respuesta
+      status: 'sending',
     };
 
     setMessages((prev) => sortNewestFirst(uniqueByIdPreferDelivered([optimisticMsg, ...prev])));
@@ -234,17 +260,13 @@ export function ChatScreen() {
     try {
       const result = await sendMessageUseCase.execute(peerId, value);
 
-      // ✅ Backend devuelve newest-first (assistant + user)
       const incoming = (result.created ?? []).map((m: ApiChatMessage) => {
         const ui = toUiMessage(m);
-
-        // ✅ todo lo que venga del backend se considera delivered
         if (ui.from === 'me') ui.status = 'delivered';
         return ui;
       });
 
       setMessages((prev) => {
-        // ✅ Remueve optimista y agrega lo real
         const withoutOptimistic = prev.filter((m) => m.id !== optimisticId);
         return sortNewestFirst(uniqueByIdPreferDelivered([...incoming, ...withoutOptimistic]));
       });
@@ -256,10 +278,7 @@ export function ChatScreen() {
   }, [peerId, sendMessageUseCase, text, toUiMessage]);
 
   /**
-   * ✅ Render mensaje:
-   * ✅ colita suave
-   * ✅ hora dentro
-   * ✅ check ✅✅ / reloj
+   * ✅ Render mensaje
    */
   const renderItem = useCallback(({ item }: { item: UiChatMessage }) => {
     const isMe = item.from === 'me';
@@ -281,23 +300,15 @@ export function ChatScreen() {
               </>
             )}
 
-            {/* ✅ Texto */}
             <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextOther]}>
               {item.text}
             </Text>
 
-            {/* ✅ Footer dentro de burbuja */}
             <View style={styles.bubbleFooter}>
-              <Text
-                style={[
-                  styles.timeInBubble,
-                  isMe ? styles.timeInBubbleMe : styles.timeInBubbleOther,
-                ]}
-              >
+              <Text style={[styles.timeInBubble, isMe ? styles.timeInBubbleMe : styles.timeInBubbleOther]}>
                 {formatTime(item.createdAt)}
               </Text>
 
-              {/* ✅ Checks solo para mensajes tuyos */}
               {isMe && (
                 <>
                   {item.status === 'sending' ? (
@@ -321,27 +332,8 @@ export function ChatScreen() {
 
   const isEmpty = text.trim().length === 0;
 
-  /**
-   * ✅ iOS offset teclado (top + header)
-   */
-  const keyboardOffset = Platform.OS === 'ios' ? insets.top + HEADER_HEIGHT : 0;
-
-  /**
-   * ✅ ANDROID FIX:
-   * Empujar el contenido cuando aparece el teclado (Android físico)
-   */
-  const androidKeyboardPadding = Platform.OS === 'android' && keyboard.isVisible ? keyboard.height : 0;
-
-  const inputBottomPadding = Math.max(insets.bottom, 10);
-
-  const RootContainer = Platform.OS === 'ios' ? KeyboardAvoidingView : View;
-  const rootProps =
-    Platform.OS === 'ios'
-      ? { behavior: 'padding' as const, keyboardVerticalOffset: keyboardOffset }
-      : {};
-
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={['top']} style={styles.safe}>
       {/* ✅ Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
@@ -352,12 +344,11 @@ export function ChatScreen() {
 
             <Pressable onPress={openUserProfile} style={styles.headerProfile} hitSlop={6}>
               <AvatarCircle size={30} name={displayName} />
-
               <View style={styles.headerTitleWrap}>
-                <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+                <Text style={styles.headerTitle} numberOfLines={1}>
                   {displayName}
                 </Text>
-                <Text style={styles.headerSubtitle} numberOfLines={1} ellipsizeMode="tail">
+                <Text style={styles.headerSubtitle} numberOfLines={1}>
                   En línea
                 </Text>
               </View>
@@ -368,11 +359,9 @@ export function ChatScreen() {
             <Pressable style={styles.headerIconBtn} hitSlop={10}>
               <Ionicons name="call-outline" size={20} color="#fff" />
             </Pressable>
-
             <Pressable style={styles.headerIconBtn} hitSlop={10}>
               <Ionicons name="videocam-outline" size={20} color="#fff" />
             </Pressable>
-
             <Pressable style={styles.headerIconBtn} hitSlop={10}>
               <Ionicons name="ellipsis-vertical" size={18} color="#fff" />
             </Pressable>
@@ -380,46 +369,61 @@ export function ChatScreen() {
         </View>
       </View>
 
-      {/* ✅ Contenido */}
-      <RootContainer style={{ flex: 1 }} {...(rootProps as any)}>
-        <View style={[styles.chatBody, { paddingBottom: androidKeyboardPadding }]}>
-          {/* ✅ Patrón */}
-          <PatternBackground />
+      {/* ✅ Body */}
+      <View style={styles.chatBody}>
+        <PatternBackground />
 
-          <View style={styles.container}>
-            <FlatList
-              data={messages}
-              keyExtractor={(item) => item.id}
-              renderItem={renderItem}
-              inverted
-              contentContainerStyle={styles.listContent}
-              refreshing={isLoadingHistory}
-              onRefresh={loadHistory}
-              keyboardShouldPersistTaps="handled"
+        <View style={styles.container}>
+          <FlatList
+            data={messages}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            inverted
+            keyboardShouldPersistTaps="handled"
+            refreshing={isLoadingHistory}
+            onRefresh={loadHistory}
+            contentContainerStyle={[
+              styles.listContent,
+              {
+                /**
+                 * ✅ Importante con FlatList invertida:
+                 * el "espacio" para el input absoluto debe ir en paddingTop.
+                 */
+                paddingTop: composerHeight + 18,
+              },
+            ]}
+          />
+
+          {/* ✅ Input absoluto (sube con teclado + emoji bar) */}
+          <View
+            onLayout={(e) => setComposerHeight(e.nativeEvent.layout.height)}
+            style={[
+              styles.inputBar,
+              {
+                bottom: composerBottom,
+                paddingBottom: 10,
+              },
+            ]}
+          >
+            <TextInput
+              value={text}
+              onChangeText={setText}
+              placeholder="Escribe un mensaje..."
+              placeholderTextColor="#6b6b6b"
+              style={styles.input}
+              multiline
             />
 
-            {/* ✅ Input */}
-            <View style={[styles.inputBar, { paddingBottom: inputBottomPadding }]}>
-              <TextInput
-                value={text}
-                onChangeText={setText}
-                placeholder="Escribe un mensaje..."
-                placeholderTextColor="#6b6b6b"
-                style={styles.input}
-                multiline
-              />
-
-              <Pressable
-                onPress={handleSend}
-                disabled={isEmpty || isSending}
-                style={[styles.sendBtn, (isEmpty || isSending) && styles.sendBtnDisabled]}
-              >
-                <Ionicons name="send" size={18} color="#fff" />
-              </Pressable>
-            </View>
+            <Pressable
+              onPress={handleSend}
+              disabled={isEmpty || isSending}
+              style={[styles.sendBtn, (isEmpty || isSending) && styles.sendBtnDisabled]}
+            >
+              <Ionicons name="send" size={18} color="#fff" />
+            </Pressable>
           </View>
         </View>
-      </RootContainer>
+      </View>
     </SafeAreaView>
   );
 }
@@ -437,7 +441,6 @@ function uniqueByIdPreferDelivered(list: UiChatMessage[]): UiChatMessage[] {
       continue;
     }
 
-    // ✅ Prioridad de estado: delivered > sending
     const merged = mergeStatus(existing, msg);
     map.set(msg.id, merged);
   }
@@ -446,12 +449,9 @@ function uniqueByIdPreferDelivered(list: UiChatMessage[]): UiChatMessage[] {
 }
 
 function mergeStatus(a: UiChatMessage, b: UiChatMessage): UiChatMessage {
-  // Si alguno no es "me", devolalls el más completo
   if (a.from !== 'me' && b.from !== 'me') return a;
 
   const rank = (s?: SendStatus) => (s === 'delivered' ? 2 : s === 'sending' ? 1 : 0);
-
-  // Preferimos el que tenga status más alto
   const best = rank(b.status) > rank(a.status) ? b : a;
 
   return {
@@ -465,9 +465,6 @@ function sortNewestFirst(list: UiChatMessage[]): UiChatMessage[] {
   return [...list].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
-/**
- * ✅ Hora en formato HH:mm (ej: 12:35)
- */
 function formatTime(date: Date): string {
   const h = String(date.getHours()).padStart(2, '0');
   const m = String(date.getMinutes()).padStart(2, '0');

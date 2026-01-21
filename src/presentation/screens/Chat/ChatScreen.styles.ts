@@ -7,6 +7,7 @@ import { StyleSheet } from 'react-native';
  * ✅ Burbuja con colita suave
  * ✅ Hora dentro de burbuja
  * ✅ Checks (✅✅) para mensajes enviados
+ * ✅ Input absoluto (se sube con el teclado)
  */
 export const styles = StyleSheet.create({
   safe: {
@@ -14,27 +15,14 @@ export const styles = StyleSheet.create({
     backgroundColor: '#d9ecff',
   },
 
-  container: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-
-  /**
-   * ✅ Header delgado y estable
-   */
+  // ✅ Header
   header: {
-    width: '100%',
     backgroundColor: '#2b69a6',
-    shadowColor: '#0b2b52',
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
   },
 
   headerContent: {
-    height: 46,
-    paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -43,13 +31,14 @@ export const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
     flex: 1,
     minWidth: 0,
   },
 
   backBtn: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
@@ -66,28 +55,26 @@ export const styles = StyleSheet.create({
   headerTitleWrap: {
     flex: 1,
     minWidth: 0,
-    justifyContent: 'center',
-    marginLeft: 8,
+    marginLeft: 10,
   },
 
   headerTitle: {
     color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
-    flexShrink: 1,
+    fontSize: 16,
+    fontWeight: '800',
   },
 
   headerSubtitle: {
-    color: '#d7e9ff',
-    fontSize: 11,
-    flexShrink: 1,
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 1,
   },
 
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexShrink: 0,
-    flexWrap: 'nowrap',
+    gap: 8,
   },
 
   headerIconBtn: {
@@ -96,61 +83,57 @@ export const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 2,
   },
 
-  /**
-   * ✅ Body del chat (fondo + patrón)
-   */
+  // ✅ Body
   chatBody: {
     flex: 1,
     backgroundColor: '#d9ecff',
+    position: 'relative', // ✅ requerido para input absoluto
   },
 
+  container: {
+    flex: 1,
+  },
+
+  // ✅ Patrón
   patternLayer: {
     ...StyleSheet.absoluteFillObject,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    opacity: 0.18,
-    padding: 8,
+    opacity: 0.16,
   },
 
   patternDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: '#ffffff',
+    width: 10,
+    height: 10,
     margin: 10,
+    borderRadius: 10,
+    backgroundColor: '#f6f7f9',
   },
 
-  /**
-   * ✅ Lista mensajes
-   */
+  // ✅ Lista (inverted)
   listContent: {
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    paddingBottom: 8,
+    paddingBottom: 14,
   },
 
-  /**
-   * ✅ Row de mensaje
-   */
+  // ✅ Mensajes
   messageRow: {
+    width: '100%',
     marginVertical: 6,
-    flexDirection: 'row',
   },
 
   messageLeft: {
-    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
   },
 
   messageRight: {
-    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
   },
 
   messageStack: {
     maxWidth: '82%',
-    minWidth: 60,
   },
 
   stackLeft: {
@@ -161,29 +144,62 @@ export const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
 
-  /**
-   * ✅ Burbuja
-   */
   bubble: {
-    position: 'relative',
+    borderRadius: 16,
     paddingHorizontal: 12,
-    paddingTop: 9,
-    paddingBottom: 6,
-    borderRadius: 14,
-  },
-
-  bubbleMe: {
-    backgroundColor: '#2b69a6',
+    paddingVertical: 10,
+    position: 'relative',
+    overflow: 'visible',
   },
 
   bubbleOther: {
     backgroundColor: '#ffffff',
   },
 
-  /**
-   * ✅ Colita suave (usamos un cuadradito rotado + un "corte" redondo)
-   * Esto da un efecto curvo muy parecido a WhatsApp.
-   */
+  bubbleMe: {
+    backgroundColor: '#3b6793',
+  },
+
+  messageText: {
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+
+  messageTextOther: {
+    color: '#1c2b3a',
+  },
+
+  messageTextMe: {
+    color: '#ffffff',
+  },
+
+  bubbleFooter: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-end',
+  },
+
+  timeInBubble: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  timeInBubbleOther: {
+    color: 'rgba(28,43,58,0.55)',
+  },
+
+  timeInBubbleMe: {
+    color: 'rgba(255,255,255,0.85)',
+  },
+
+  checkIconMe: {
+    marginLeft: 2,
+  },
+
+  // ✅ Colitas
   tailBaseLeft: {
     position: 'absolute',
     left: -6,
@@ -195,106 +211,62 @@ export const styles = StyleSheet.create({
     borderRadius: 3,
   },
 
+  tailCutLeft: {
+    position: 'absolute',
+    left: -10,
+    bottom: 10,
+    width: 12,
+    height: 12,
+    backgroundColor: '#d9ecff',
+    borderRadius: 6,
+  },
+
   tailBaseRight: {
     position: 'absolute',
     right: -6,
     bottom: 10,
     width: 12,
     height: 12,
-    backgroundColor: '#2b69a6',
+    backgroundColor: '#31669a',
     transform: [{ rotate: '45deg' }],
     borderRadius: 3,
   },
 
-  /**
-   * ✅ "Corte" para suavizar la colita (simula curva)
-   * Color igual al fondo del chat.
-   */
-  tailCutLeft: {
-    position: 'absolute',
-    left: -2,
-    bottom: 6,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#d9ecff',
-  },
-
   tailCutRight: {
     position: 'absolute',
-    right: -2,
-    bottom: 6,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    right: -10,
+    bottom: 10,
+    width: 12,
+    height: 12,
     backgroundColor: '#d9ecff',
+    borderRadius: 6,
   },
 
-  /**
-   * ✅ Texto del mensaje
-   */
-  messageText: {
-    fontSize: 14,
-    lineHeight: 18,
-  },
-
-  messageTextMe: {
-    color: '#ffffff',
-  },
-
-  messageTextOther: {
-    color: '#0b2b52',
-  },
-
-  /**
-   * ✅ Footer dentro de la burbuja (hora + checks)
-   */
-  bubbleFooter: {
-    marginTop: 6,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: 6,
-  },
-
-  timeInBubble: {
-    fontSize: 11,
-    opacity: 0.85,
-  },
-
-  timeInBubbleMe: {
-    color: 'rgba(255,255,255,0.85)',
-  },
-
-  timeInBubbleOther: {
-    color: 'rgba(11,43,82,0.55)',
-  },
-
-  checkIconMe: {
-    opacity: 0.9,
-  },
-
-  /**
-   * ✅ Input bar
-   */
+  // ✅ Input absoluto (se mueve con teclado)
   inputBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 10,
     paddingTop: 10,
     backgroundColor: '#cfe6ff',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.06)',
   },
 
   input: {
     flex: 1,
     minHeight: 44,
     maxHeight: 120,
-    paddingHorizontal: 12,
+    backgroundColor: '#fcfcfc',
+    borderRadius: 18,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    fontSize: 14,
     color: '#0b2b52',
+    fontSize: 15,
+    fontWeight: '600',
   },
 
   sendBtn: {
