@@ -1,15 +1,28 @@
-import { Platform } from 'react-native';
+import { getApiBaseUrl } from '../../shared/config/apiBaseUrl';
 
 /**
- * Configuración centralizada del entorno.
- * ✅ Android Emulator: localhost del PC = 10.0.2.2
- * ✅ iOS Simulator: localhost funciona normal
- * ✅ Dispositivo físico: usar IP real de tu PC (ej: 192.168.1.10)
+ * ✅ ENV (Configuración de entorno)
+ *
+ * Objetivo:
+ * - Centralizar endpoints y configuración
+ * - Evitar hardcodear `localhost` (en Android físico SIEMPRE falla)
+ *
+ * Cómo se resuelve la URL base:
+ * 1) `EXPO_PUBLIC_API_URL` desde `.env` (RECOMENDADO)
+ * 2) `extra.API_BASE_URL` desde app.config / app.json
+ * 3) Detección automática por Expo (hostUri)
+ * 4) Fallbacks por plataforma
  */
 export const ENV = {
-  API_BASE_URL:
-    Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000',
+  /**
+   * ✅ URL base de la API
+   * Ejemplo en Android físico: http://192.168.1.28:3000
+   */
+  API_BASE_URL: getApiBaseUrl(),
 
+  /**
+   * ✅ Refresh tokens
+   */
   AUTH_REFRESH_PATH: '/auth/refresh',
 
   /**
@@ -23,4 +36,4 @@ export const ENV = {
    * - POST /chat/:peerId/messages
    */
   CHAT_PATH: '/chat',
-};
+} as const;

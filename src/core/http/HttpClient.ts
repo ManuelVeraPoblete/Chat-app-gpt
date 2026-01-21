@@ -22,6 +22,9 @@ export type HttpClient = {
  * - Manejo consistente de errores
  */
 export function createHttpClient(baseUrl: string = ENV.API_BASE_URL): HttpClient {
+  // ✅ Normalizamos baseUrl por seguridad (sin slash final)
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+
   const client: HttpClient = {
     async request<TResponse, TBody = unknown>(
       path: string,
@@ -29,16 +32,31 @@ export function createHttpClient(baseUrl: string = ENV.API_BASE_URL): HttpClient
       body?: TBody,
       headers: Record<string, string> = {}
     ): Promise<TResponse> {
-      const url = `${baseUrl}${path}`;
+      const url = buildUrl(normalizedBaseUrl, path);
 
-      const res = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          ...headers,
-        },
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-      });
+      let res: Response;
+      try {
+        res = await fetch(url, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            ...headers,
+          },
+          body: body !== undefined ? JSON.stringify(body) : undefined,
+        });
+      } catch (e: any) {
+        // ✅ Este catch resuelve el típico: "Network request failed"
+        // (Android físico llamando a localhost, backend no accesible, firewall, etc.)
+        throw new HttpError(
+          `Network request failed al llamar ${url}. ` +
+            `Revisa que tu API esté escuchando en 0.0.0.0 y que la URL base sea correcta (ej: http://192.168.1.28:3000).`,
+          0,
+          {
+            cause: e?.message ?? String(e),
+            url,
+          }
+        );
+      }
 
       const text = await res.text();
       const payload = text ? safeJsonParse(text) : undefined;
@@ -57,6 +75,21 @@ export function createHttpClient(baseUrl: string = ENV.API_BASE_URL): HttpClient
   };
 
   return client;
+}
+
+/**
+ * ✅ Asegura que baseUrl no termine en slash.
+ */
+function normalizeBaseUrl(url: string): string {
+  return url.replace(/\/$/, '');
+}
+
+/**
+ * ✅ Asegura que path comience con slash.
+ */
+function buildUrl(baseUrl: string, path: string): string {
+  const safePath = path.startsWith('/') ? path : `/${path}`;
+  return `${baseUrl}${safePath}`;
 }
 
 function safeJsonParse(text: string) {

@@ -1,10 +1,10 @@
 import { StyleSheet } from 'react-native';
 
 /**
- * ✅ Estilos del ChatScreen (separado del TSX)
- * - Header azul suave
- * - Botones azules
- * - Fondo celeste suave
+ * ✅ ChatScreen styles (WhatsApp-like)
+ * - Header con altura fija (56px) + SafeArea
+ * - Sin desbordes por nombres largos
+ * - Botones compactos a la derecha
  */
 export const styles = StyleSheet.create({
   safe: {
@@ -17,189 +17,188 @@ export const styles = StyleSheet.create({
     backgroundColor: '#d9ecff',
   },
 
-  // ✅ Header delgado (SIN height dinámico)
+  /**
+   * ✅ Header wrapper
+   * - paddingTop se inyecta desde insets.top en el TSX
+   */
   header: {
+    width: '100%',
     backgroundColor: '#2b69a6',
-    paddingHorizontal: 10,
-    paddingVertical: 8, // ✅ ESTE ES EL CAMBIO IMPORTANTE (lo hace fino)
-    flexDirection: 'row',
-    alignItems: 'center',
 
     shadowColor: '#0b2b52',
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 }, // ✅ menos sombra vertical
-    elevation: 6,
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+
+    elevation: 4,
   },
 
+  /**
+   * ✅ Contenido del header con altura fija (56px)
+   * - Esto es lo que hace que se vea "tipo WhatsApp"
+   */
+  headerContent: {
+    height: 56,
+    paddingHorizontal: 8,
+    paddingBottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  /**
+   * ✅ Lado izquierdo: back + perfil
+   */
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
     flex: 1,
+    minWidth: 0, // ✅ clave para permitir encoger con textos largos
+    gap: 4,
   },
 
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-
-  iconBtn: {
-    width: 34, // ✅ un poco más chico
-    height: 34,
-    borderRadius: 17,
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  titleWrap: {
+  /**
+   * ✅ Área clickeable de perfil
+   */
+  headerProfile: {
+    flexDirection: 'row',
+    alignItems: 'center',
     flex: 1,
+    minWidth: 0,
+    gap: 10,
+    paddingRight: 6,
   },
 
-  title: {
+  headerTitleWrap: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+  },
+
+  headerTitle: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '700',
+    flexShrink: 1,
   },
 
-  subtitle: {
-    color: 'rgba(255,255,255,0.85)',
+  headerSubtitle: {
+    color: '#d7e9ff',
     fontSize: 12,
-    fontWeight: '600',
     marginTop: 1,
+    flexShrink: 1,
   },
 
-  messagesList: {
-    flex: 1,
-  },
-
-  messagesContent: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 10,
-  },
-
-  // ✅ Burbuja
-  messageRow: {
+  /**
+   * ✅ Lado derecho: iconos compactos
+   */
+  headerRight: {
     flexDirection: 'row',
-    maxWidth: '85%',
+    alignItems: 'center',
+    gap: 2,
+    marginLeft: 6,
+  },
+
+  headerIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  /**
+   * ✅ Lista mensajes
+   */
+  listContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+
+  messageRow: {
+    marginVertical: 4,
+    flexDirection: 'row',
   },
 
   messageLeft: {
-    alignSelf: 'flex-start',
+    justifyContent: 'flex-start',
   },
 
   messageRight: {
-    alignSelf: 'flex-end',
+    justifyContent: 'flex-end',
   },
 
   bubble: {
+    maxWidth: '82%',
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 16,
+    paddingVertical: 8,
+    borderRadius: 14,
+  },
+
+  bubbleMe: {
+    backgroundColor: '#2b69a6',
+    borderTopRightRadius: 4,
   },
 
   bubbleOther: {
     backgroundColor: '#ffffff',
-    borderTopLeftRadius: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
-
-  bubbleMe: {
-    backgroundColor: '#cfe7ff',
-    borderTopRightRadius: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
+    borderTopLeftRadius: 4,
   },
 
   messageText: {
-    fontSize: 15,
-    fontWeight: '600',
-    lineHeight: 20,
-    color: '#1c2b2b',
+    fontSize: 14,
   },
 
-  // ✅ Input
-  inputWrap: {
+  messageTextMe: {
+    color: '#ffffff',
+  },
+
+  messageTextOther: {
+    color: '#0b2b52',
+  },
+
+  /**
+   * ✅ Barra input inferior
+   */
+  inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    backgroundColor: '#cfe6ff',
     gap: 10,
-    paddingHorizontal: 10,
-    paddingTop: 10,
-    backgroundColor: '#d9ecff',
-  },
-
-  inputCard: {
-    flex: 1,
-    minHeight: 44,
-    maxHeight: 120,
-    backgroundColor: '#fff',
-    borderRadius: 22,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 2,
   },
 
   input: {
     flex: 1,
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111827',
-    paddingTop: 6,
-    paddingBottom: 6,
+    minHeight: 44,
+    maxHeight: 120,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    fontSize: 14,
+    color: '#0b2b52',
   },
 
-  smallIcon: {
-    width: 34,
-    height: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // ✅ Botón enviar/mic
   sendBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: '#2b69a6',
-
-    shadowColor: '#0b2b52',
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
-  },
-
-  // ✅ Placeholder cuando no hay mensajes
-  emptyWrap: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
   },
 
-  emptyText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: 'rgba(20, 70, 120, 0.55)',
-    textAlign: 'center',
+  sendBtnDisabled: {
+    opacity: 0.5,
   },
 });

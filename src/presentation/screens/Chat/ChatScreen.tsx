@@ -9,13 +9,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useFocusPolling } from '../../../shared/hooks/useFocusPolling';
 import { styles } from './ChatScreen.styles';
 import { Routes } from '../../navigation/routes';
 import type { RootStackParamList } from '../../navigation/AppNavigator';
@@ -48,9 +48,12 @@ type UiChatMessage = {
 
 /**
  * ✅ ChatScreen (WhatsApp style)
- * - Conecta con API NestJS:
- *   GET  /chat/:peerId/messages
- *   POST /chat/:peerId/messages
+ * - GET  /chat/:peerId/messages
+ * - POST /chat/:peerId/messages
+ *
+ * Incluye:
+ * ✅ Auto-refresh con polling mientras la pantalla está activa (sin websockets)
+ * ✅ Header compacto estilo WhatsApp
  */
 export function ChatScreen() {
   const navigation = useNavigation<ChatNav>();
@@ -69,7 +72,7 @@ export function ChatScreen() {
   const [isSending, setIsSending] = useState(false);
 
   /**
-   * ✅ UseCases (Clean Architecture):
+   * ✅ UseCases (Clean Architecture)
    * UI no conoce endpoints, solo casos de uso.
    */
   const chatRepo = useMemo(() => new ChatRepositoryHttp(http), [http]);
@@ -84,7 +87,6 @@ export function ChatScreen() {
 
   /**
    * ✅ Abrir perfil del usuario con el que estás chateando
-   * - Navega a UserProfileScreen y le pasa userId (peerId)
    */
   const openUserProfile = useCallback(() => {
     if (!peerId) return;
@@ -103,13 +105,13 @@ export function ChatScreen() {
 
     navigation.navigate(Routes.UserProfile, {
       userId: peerId,
-      accessToken,
-      displayName, // opcional para mostrar en el header del perfil
-    });
-  }, [displayName, navigation, peerId, session]);
+      displayName,
+      email: route.params.email,
+    } as any);
+  }, [peerId, session, navigation, displayName, route.params.email]);
 
   /**
-   * ✅ Convierte mensaje de API -> UI
+   * ✅ Convertir mensaje API -> UI
    */
   const toUiMessage = useCallback(
     (apiMsg: ApiChatMessage): UiChatMessage => {
@@ -137,9 +139,8 @@ export function ChatScreen() {
     try {
       const history = await getMessagesUseCase.execute(peerId, 200);
 
-      // Backend devuelve newest-first => ideal para FlatList inverted
+      // ✅ Backend devuelve newest-first => ideal para FlatList inverted
       const ui = (history.messages ?? []).map(toUiMessage);
-
       setMessages(sortNewestFirst(uniqueById(ui)));
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'No se pudo cargar el historial del chat');
@@ -153,16 +154,58 @@ export function ChatScreen() {
   }, [loadHistory]);
 
   /**
-   * ✅ Enviar mensaje a la API
-   * - Inserta optimista el mensaje del usuario
-   * - POST /chat/:peerId/messages
-   * - Inserta los mensajes creados por el backend (incluye assistant si corresponde)
+   * ✅ Auto-refresh del chat (SIN WebSocket)
+   * - Trae mensajes cada X ms SOLO cuando la pantalla está enfocada
+   * - Mezcla mensajes nuevos sin duplicar
+   */
+  const isRefreshingRef = useRef(false);
+
+  const fetchLatestMessages = useCallback(async (): Promise<UiChatMessage[]> => {
+    if (!peerId) return [];
+
+    // ✅ Evita llamadas concurrentes
+    if (isRefreshingRef.current) return [];
+    isRefreshingRef.current = true;
+
+    try {
+      // ✅ Traemos últimos 50 mensajes para detectar nuevos
+      const latest = await getMessagesUseCase.execute(peerId, 50);
+      return (latest.messages ?? []).map(toUiMessage);
+    } catch {
+      return [];
+    } finally {
+      isRefreshingRef.current = false;
+    }
+  }, [getMessagesUseCase, peerId, toUiMessage]);
+
+  useFocusPolling<UiChatMessage[]>({
+    enabled: Boolean(peerId),
+    intervalMs: 1000, // ✅ Puedes bajar a 800 si lo quieres más instantáneo
+    fetcher: fetchLatestMessages,
+    onData: (latestUi) => {
+      if (!latestUi.length) return;
+
+      setMessages((prev) => {
+        const existingIds = new Set(prev.map((m) => m.id));
+        const onlyNew = latestUi.filter((m) => !existingIds.has(m.id));
+
+        if (!onlyNew.length) return prev;
+
+        return sortNewestFirst(uniqueById([...onlyNew, ...prev]));
+      });
+    },
+  });
+
+  /**
+   * ✅ Enviar mensaje
+   * - Inserta optimista
+   * - Envía al backend
+   * - Inserta lo retornado por backend (incluye assistant)
    */
   const handleSend = useCallback(async () => {
     const value = text.trim();
     if (!value || !peerId) return;
 
-    // ✅ Optimista: aparece altiro
     const optimisticId = `local-${Date.now()}`;
     lastOptimisticIdRef.current = optimisticId;
 
@@ -173,7 +216,7 @@ export function ChatScreen() {
       from: 'me',
     };
 
-    // FlatList invertida => insertamos al inicio
+    // ✅ FlatList invertida => insertamos al inicio
     setMessages((prev) => sortNewestFirst(uniqueById([optimisticMsg, ...prev])));
     setText('');
 
@@ -182,14 +225,14 @@ export function ChatScreen() {
     try {
       const result = await sendMessageUseCase.execute(peerId, value);
 
-      // Backend devuelve newest-first (assistant + user)
+      // ✅ Backend devuelve newest-first (assistant + user)
       const incoming = (result.created ?? []).map(toUiMessage);
 
       setMessages((prev) => {
         // ✅ Remueve el optimista para evitar duplicado
         const withoutOptimistic = prev.filter((m) => m.id !== optimisticId);
 
-        // ✅ Agrega lo que viene del backend (incluye assistant)
+        // ✅ Agrega lo que viene del backend
         return sortNewestFirst(uniqueById([...incoming, ...withoutOptimistic]));
       });
     } catch (e: any) {
@@ -199,13 +242,20 @@ export function ChatScreen() {
     }
   }, [peerId, sendMessageUseCase, text, toUiMessage]);
 
+  /**
+   * ✅ Render mensaje
+   * - Texto blanco cuando es burbuja azul (me)
+   * - Texto oscuro cuando es burbuja blanca (other)
+   */
   const renderItem = useCallback(({ item }: { item: UiChatMessage }) => {
     const isMe = item.from === 'me';
 
     return (
       <View style={[styles.messageRow, isMe ? styles.messageRight : styles.messageLeft]}>
         <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
-          <Text style={styles.messageText}>{item.text}</Text>
+          <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextOther]}>
+            {item.text}
+          </Text>
         </View>
       </View>
     );
@@ -213,98 +263,89 @@ export function ChatScreen() {
 
   const isEmpty = text.trim().length === 0;
 
-  /**
-   * ✅ Header compacto
-   * - SafeAreaView ya aplica el top
-   * - keyboardOffset solo considera header visual
-   */
-  const HEADER_VISUAL_HEIGHT = 52;
-  const keyboardOffset = HEADER_VISUAL_HEIGHT;
-
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.container}>
-        {/* ✅ HEADER DELGADO */}
-        <View style={styles.header}>
+      {/* ✅ Header compacto estilo WhatsApp */}
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
           <View style={styles.headerLeft}>
-            <Pressable onPress={() => navigation.goBack()} style={styles.iconBtn}>
-              <Ionicons name="arrow-back" size={22} color="#fff" />
+            <Pressable
+              onPress={() => navigation.goBack()}
+              style={styles.backBtn}
+              hitSlop={10}
+            >
+              <Ionicons name="chevron-back" size={22} color="#fff" />
             </Pressable>
-
-            {/* ✅ Avatar clickeable -> abre perfil */}
-            <Pressable onPress={openUserProfile} hitSlop={12}>
-              <AvatarCircle name={displayName} size={32} badge="online" />
-            </Pressable>
-
-            <View style={styles.titleWrap}>
-              <Text numberOfLines={1} style={styles.title}>
-                {displayName}
-              </Text>
-
-              <Text style={styles.subtitle}>{isLoadingHistory ? 'Cargando…' : 'En línea'}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* ✅ BODY ajustado a teclado */}
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? keyboardOffset : 0}
-        >
-          {/* ✅ MENSAJES */}
-          <FlatList
-            data={messages}
-            keyExtractor={(item) => item.id}
-            renderItem={renderItem}
-            inverted
-            style={styles.messagesList}
-            contentContainerStyle={[
-              styles.messagesContent,
-              messages.length === 0 ? { flexGrow: 1 } : null,
-            ]}
-            keyboardDismissMode="on-drag"
-            keyboardShouldPersistTaps="handled"
-            ListEmptyComponent={
-              <View style={styles.emptyWrap}>
-                <Text style={styles.emptyText}>
-                  Aún no hay mensajes.{"\n"}Escribe el primero 👇
-                </Text>
-              </View>
-            }
-          />
-
-          {/* ✅ INPUT (respeta SafeArea Bottom) */}
-          <View style={[styles.inputWrap, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-            <View style={styles.inputCard}>
-              <Pressable style={styles.smallIcon}>
-                <Ionicons name="happy-outline" size={22} color="#6b7280" />
-              </Pressable>
-
-              <TextInput
-                value={text}
-                onChangeText={setText}
-                placeholder="Message"
-                placeholderTextColor="#9ca3af"
-                style={styles.input}
-                multiline
-              />
-
-              <Pressable style={styles.smallIcon}>
-                <Ionicons name="attach-outline" size={22} color="#6b7280" />
-              </Pressable>
-
-              <Pressable style={styles.smallIcon}>
-                <Ionicons name="camera-outline" size={22} color="#6b7280" />
-              </Pressable>
-            </View>
 
             <Pressable
-              style={[styles.sendBtn, isSending ? { opacity: 0.7 } : null]}
-              onPress={handleSend}
-              disabled={isSending}
+              onPress={openUserProfile}
+              style={styles.headerProfile}
+              hitSlop={6}
             >
-              <Ionicons name={isEmpty ? 'mic' : 'send'} size={20} color="#fff" />
+              <AvatarCircle size={34} name={displayName} />
+
+              <View style={styles.headerTitleWrap}>
+                <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+                  {displayName}
+                </Text>
+
+                <Text style={styles.headerSubtitle} numberOfLines={1} ellipsizeMode="tail">
+                  En línea
+                </Text>
+              </View>
+            </Pressable>
+          </View>
+
+          <View style={styles.headerRight}>
+            <Pressable style={styles.headerIconBtn} hitSlop={10}>
+              <Ionicons name="call-outline" size={20} color="#fff" />
+            </Pressable>
+
+            <Pressable style={styles.headerIconBtn} hitSlop={10}>
+              <Ionicons name="videocam-outline" size={20} color="#fff" />
+            </Pressable>
+
+            <Pressable style={styles.headerIconBtn} hitSlop={10}>
+              <Ionicons name="ellipsis-vertical" size={18} color="#fff" />
+            </Pressable>
+          </View>
+        </View>
+      </View>
+
+      {/* ✅ Lista de mensajes */}
+      <View style={styles.container}>
+        <FlatList
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          inverted
+          contentContainerStyle={styles.listContent}
+          refreshing={isLoadingHistory}
+          onRefresh={loadHistory}
+          keyboardShouldPersistTaps="handled"
+        />
+
+        {/* ✅ Input */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
+        >
+          <View style={styles.inputBar}>
+            <TextInput
+              value={text}
+              onChangeText={setText}
+              placeholder="Escribe un mensaje..."
+              placeholderTextColor="#6b6b6b"
+              style={styles.input}
+              multiline
+            />
+
+            <Pressable
+              onPress={handleSend}
+              disabled={isEmpty || isSending}
+              style={[styles.sendBtn, (isEmpty || isSending) && styles.sendBtnDisabled]}
+            >
+              <Ionicons name="send" size={18} color="#fff" />
             </Pressable>
           </View>
         </KeyboardAvoidingView>

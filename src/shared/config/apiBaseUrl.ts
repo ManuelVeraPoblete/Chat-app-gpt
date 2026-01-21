@@ -7,9 +7,16 @@ import * as Device from 'expo-device';
  * Devuelve la URL base correcta según el entorno:
  * - Android Emulator  -> 10.0.2.2
  * - iOS Simulator     -> localhost
- * - Dispositivo físico-> IP del PC (si Expo entrega hostUri)
+ * - Dispositivo físico-> IP del PC (recomendado: usar EXPO_PUBLIC_API_URL en .env)
  */
 export function getApiBaseUrl(): string {
+  // ✅ 0) Override por variable de entorno (la forma más confiable para Android físico)
+  // En el root del proyecto crea un `.env` con:
+  // EXPO_PUBLIC_API_URL=http://192.168.1.28:3000
+  // (Expo expone estas vars en runtime automáticamente)
+  const envUrl = (process.env.EXPO_PUBLIC_API_URL ?? '').trim();
+  if (envUrl) return normalizeBaseUrl(envUrl);
+
   // ✅ 1) Override opcional por config extra (si quieres dejarlo fijo)
   const extra: any =
     (Constants.expoConfig?.extra as any) ??
@@ -17,7 +24,7 @@ export function getApiBaseUrl(): string {
     {};
 
   if (extra?.API_BASE_URL) {
-    return String(extra.API_BASE_URL);
+    return normalizeBaseUrl(String(extra.API_BASE_URL));
   }
 
   // ✅ 2) Intentar detectar IP del PC desde Expo (hostUri)
@@ -54,4 +61,19 @@ export function getApiBaseUrl(): string {
 
   // Otros (web, etc.)
   return 'http://localhost:3000';
+}
+
+/**
+ * ✅ Normaliza la base URL para evitar errores típicos:
+ * - asegura http/https
+ * - elimina slash final
+ */
+function normalizeBaseUrl(url: string): string {
+  const trimmed = url.trim();
+
+  // Si el usuario puso solo "192.168.1.28:3000", agregamos http://
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+
+  // Quitamos slash final para que `${baseUrl}${path}` no duplique
+  return withProtocol.replace(/\/$/, '');
 }
