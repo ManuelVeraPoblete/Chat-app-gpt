@@ -74,6 +74,18 @@ export function ChatScreen() {
   const [isSending, setIsSending] = useState(false);
 
   /**
+   * ✅ Ref para controlar el scroll del chat.
+   * - Con FlatList invertida, el "bottom" real es offset = 0
+   */
+  const listRef = useRef<FlatList<UiChatMessage>>(null);
+
+  /**
+   * ✅ Si el usuario está "pegado" al final del chat.
+   * - Si el usuario sube a leer mensajes antiguos, NO forzamos scroll.
+   */
+  const isAtBottomRef = useRef(true);
+
+  /**
    * ✅ Para que la lista no quede debajo del input absoluto
    */
   const [composerHeight, setComposerHeight] = useState(72);
@@ -122,6 +134,16 @@ export function ChatScreen() {
   const safeBottom = Math.max(insets.bottom, 10);
 
   const composerBottom = keyboard.isVisible ? keyboardOffset : safeBottom;
+
+  /**
+   * ✅ Scroll helper (WhatsApp-like)
+   * - Con lista invertida, offset 0 = último mensaje visible.
+   */
+  const scrollToBottom = useCallback((animated = true) => {
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated });
+    });
+  }, []);
 
   /**
    * ✅ UseCases
@@ -197,6 +219,19 @@ export function ChatScreen() {
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
+
+  /**
+   * ✅ Cuando aparece/desaparece el teclado, empujamos también la lista.
+   * Esto evita que el último mensaje quede tapado (especialmente en Android "overlay").
+   */
+  useEffect(() => {
+    if (!isAtBottomRef.current) return;
+
+    // Pequeño delay para que RN tenga el layout final después del cambio de teclado
+    const delay = Platform.OS === 'ios' ? 60 : 20;
+    const t = setTimeout(() => scrollToBottom(false), delay);
+    return () => clearTimeout(t);
+  }, [keyboard.isVisible, composerBottom, scrollToBottom]);
 
   /**
    * ✅ Polling (sin WS)
@@ -375,21 +410,40 @@ export function ChatScreen() {
 
         <View style={styles.container}>
           <FlatList
+            ref={listRef}
             data={messages}
             keyExtractor={(item) => item.id}
             renderItem={renderItem}
             inverted
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            scrollEventThrottle={16}
             refreshing={isLoadingHistory}
             onRefresh={loadHistory}
+            onScroll={(e) => {
+              /**
+               * ✅ Con lista invertida:
+               * - offsetY 0 = bottom
+               * - a mayor offsetY, más arriba (mensajes antiguos)
+               */
+              const y = e.nativeEvent.contentOffset.y;
+              isAtBottomRef.current = y <= 25;
+            }}
+            onContentSizeChange={() => {
+              // ✅ Si el usuario está al final, mantenemos el último mensaje visible.
+              if (isAtBottomRef.current) scrollToBottom(false);
+            }}
             contentContainerStyle={[
               styles.listContent,
               {
                 /**
                  * ✅ Importante con FlatList invertida:
                  * el "espacio" para el input absoluto debe ir en paddingTop.
+                 *
+                 * ✅ Además, cuando el teclado hace overlay (Android),
+                 * debemos sumar composerBottom para empujar los mensajes hacia arriba.
                  */
-                paddingTop: composerHeight + 18,
+                paddingTop: composerHeight + composerBottom + 18,
               },
             ]}
           />
