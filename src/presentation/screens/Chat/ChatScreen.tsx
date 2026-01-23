@@ -2,6 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   FlatList,
+  Image,
+  Linking,
+  Modal,
   Platform,
   Pressable,
   Text,
@@ -10,26 +13,39 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AttachSheet } from './components/AttachSheet';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { useFocusPolling } from '../../../shared/hooks/useFocusPolling';
-import { useKeyboard } from '../../../shared/hooks/useKeyboard';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 
 import { styles } from './ChatScreen.styles';
 import { Routes } from '../../navigation/routes';
 import type { RootStackParamList } from '../../navigation/AppNavigator';
-import { AvatarCircle } from '../Home/components/AvatarCircle';
 
+import { AvatarCircle } from '../Home/components/AvatarCircle';
 import { useApi } from '../../../state/api/ApiContext';
 import { useAuth } from '../../../state/auth/AuthContext';
+
+import { ENV } from '../../../core/config/env';
+import { useFocusPolling } from '../../../shared/hooks/useFocusPolling';
+import { useKeyboard } from '../../../shared/hooks/useKeyboard';
 
 import { ChatRepositoryHttp } from '../../../domain/chat/ChatRepositoryHttp';
 import { GetChatMessagesUseCase } from '../../../domain/chat/GetChatMessagesUseCase';
 import { SendChatMessageUseCase } from '../../../domain/chat/usecases/SendChatMessageUseCase';
-import type { ChatMessage as ApiChatMessage } from '../../../domain/chat/entities/ChatMessage';
+
+import type {
+  ChatMessage as ApiChatMessage,
+  OutgoingAttachment,
+} from '../../../domain/chat/entities/ChatMessage';
+
+import type { LocalAttachment } from './types/localAttachment.types';
+import { AttachmentPreviewBar } from './components/AttachmentPreviewBar';
+import { MessageAttachments, type UiAttachment } from './components/MessageAttachments';
 
 /**
  * ✅ Tipos de navegación
@@ -45,18 +61,24 @@ type UiChatMessage = {
   createdAt: Date;
   from: 'me' | 'other';
   status?: SendStatus;
+  attachments?: UiAttachment[];
 };
 
 /**
- * ✅ Guard para Android (barra emoji / sugerencias / GIF)
- * Si queda un mini gap, bájalo a 30.
- * Si aún se tapa, súbelo a 55.
+ * ✅ Guard Android: barra emojis / suggestions overlay
  */
 const ANDROID_EMOJI_BAR_GUARD = 44;
+
+/**
+ * ✅ Límites WhatsApp-like (ajústalos si deseas)
+ */
+const MAX_ATTACHMENTS_PER_MESSAGE = 10;
+const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25MB
 
 export function ChatScreen() {
   const navigation = useNavigation<ChatNav>();
   const route = useRoute<ChatRoute>();
+  const [isAttachSheetOpen, setIsAttachSheetOpen] = useState(false);
 
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboard();
@@ -65,7 +87,9 @@ export function ChatScreen() {
   const { http } = useApi();
   const { session } = useAuth();
 
-  const { displayName, userId: peerId } = route.params;
+  // ✅ Params del chat
+  const { displayName, userId: peerId, email } = route.params;
+
   const myUserId = session?.user?.id ?? '';
 
   const [messages, setMessages] = useState<UiChatMessage[]>([]);
@@ -73,25 +97,28 @@ export function ChatScreen() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [isSending, setIsSending] = useState(false);
 
-  /**
-   * ✅ Ref para controlar el scroll del chat.
-   * - Con FlatList invertida, el "bottom" real es offset = 0
-   */
-  const listRef = useRef<FlatList<UiChatMessage>>(null);
+  // ✅ Adjuntos pendientes antes de enviar
+  const [pendingAttachments, setPendingAttachments] = useState<LocalAttachment[]>([]);
+
+  // ✅ Preview full-screen imagen
+  const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
 
   /**
-   * ✅ Si el usuario está "pegado" al final del chat.
-   * - Si el usuario sube a leer mensajes antiguos, NO forzamos scroll.
+   * ✅ Ref scroll (lista invertida)
+   * offset=0 => último mensaje visible
    */
+  const listRef = useRef<FlatList<UiChatMessage>>(null);
   const isAtBottomRef = useRef(true);
 
   /**
-   * ✅ Para que la lista no quede debajo del input absoluto
+   * ✅ Composer height (para paddingTop de la lista)
+   * - El inputBar es absoluto
+   * - Para que la lista suba y el último mensaje quede visible (WhatsApp)
    */
   const [composerHeight, setComposerHeight] = useState(72);
 
   /**
-   * ✅ Detectar altura base (sin teclado)
+   * ✅ Base height sin teclado para cálculo robusto
    */
   const baseHeightRef = useRef(windowHeight);
 
@@ -102,51 +129,26 @@ export function ChatScreen() {
   }, [keyboard.isVisible, windowHeight]);
 
   /**
-   * ✅ Si Android ya está haciendo resize real, no necesitamos mover con bottom
+   * ✅ Si Android está haciendo resize real (adjustResize), no movemos con bottom manual
    */
-  const isSystemResizing =
-    keyboard.isVisible && windowHeight < baseHeightRef.current - 80;
+  const isSystemResizing = keyboard.isVisible && windowHeight < baseHeightRef.current - 80;
 
-  /**
-   * ✅ Altura real del teclado (incluye barras raras)
-   * - height: a veces NO incluye barra emojis
-   * - screenY: es más confiable => baseHeight - screenY
-   */
   const heightByScreenY = keyboard.screenY
     ? Math.max(0, baseHeightRef.current - keyboard.screenY)
     : 0;
 
   const effectiveKeyboardHeight = Math.max(keyboard.height, heightByScreenY);
 
-  /**
-   * ✅ Offset final del input
-   * - si overlay: subimos input con altura del teclado (+ guard emoji bar)
-   * - si resize real: bottom 0
-   */
   const keyboardOffset =
     keyboard.isVisible && !isSystemResizing
       ? effectiveKeyboardHeight + (Platform.OS === 'android' ? ANDROID_EMOJI_BAR_GUARD : 0)
       : 0;
 
-  /**
-   * ✅ Bottom cuando NO hay teclado
-   */
   const safeBottom = Math.max(insets.bottom, 10);
-
   const composerBottom = keyboard.isVisible ? keyboardOffset : safeBottom;
 
   /**
-   * ✅ Scroll helper (WhatsApp-like)
-   * - Con lista invertida, offset 0 = último mensaje visible.
-   */
-  const scrollToBottom = useCallback((animated = true) => {
-    requestAnimationFrame(() => {
-      listRef.current?.scrollToOffset({ offset: 0, animated });
-    });
-  }, []);
-
-  /**
-   * ✅ UseCases
+   * ✅ UseCases (arquitectura limpia)
    */
   const chatRepo = useMemo(() => new ChatRepositoryHttp(http), [http]);
   const getMessagesUseCase = useMemo(() => new GetChatMessagesUseCase(chatRepo), [chatRepo]);
@@ -167,16 +169,34 @@ export function ChatScreen() {
   }, []);
 
   /**
-   * ✅ Abrir perfil usuario
+   * ✅ Navega al perfil (si lo tienes implementado)
    */
   const openUserProfile = useCallback(() => {
     if (!peerId) return;
     navigation.navigate(Routes.UserProfile as any, {
       userId: peerId,
       displayName,
-      email: route.params.email,
+      email,
     });
-  }, [peerId, navigation, displayName, route.params.email]);
+  }, [peerId, navigation, displayName, email]);
+
+  /**
+   * ✅ Scroll al fondo
+   */
+  const scrollToBottom = useCallback((animated = true) => {
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated });
+    });
+  }, []);
+
+  /**
+   * ✅ Construye URL absoluta si backend manda relativa
+   */
+  const toAbsoluteUrl = useCallback((url: string): string => {
+    if (!url) return url;
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    return `${ENV.API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+  }, []);
 
   /**
    * ✅ Convert API -> UI
@@ -186,15 +206,26 @@ export function ChatScreen() {
       const createdAt = apiMsg.createdAt ? new Date(apiMsg.createdAt) : new Date();
       const isMe = apiMsg.senderId === myUserId;
 
+      const uiAttachments: UiAttachment[] =
+        (apiMsg.attachments ?? []).map((a) => ({
+          id: a.id,
+          kind: a.kind === 'IMAGE' ? 'image' : 'file',
+          uri: toAbsoluteUrl(a.url),
+          name: a.fileName,
+          mimeType: a.mimeType,
+          size: a.fileSize,
+        })) ?? [];
+
       return {
         id: apiMsg.id,
-        text: apiMsg.text,
+        text: apiMsg.text ?? '',
         createdAt,
         from: isMe ? 'me' : 'other',
         status: isMe ? 'delivered' : undefined,
+        attachments: uiAttachments.length ? uiAttachments : undefined,
       };
     },
-    [myUserId]
+    [myUserId, toAbsoluteUrl],
   );
 
   /**
@@ -204,34 +235,31 @@ export function ChatScreen() {
     if (!peerId) return;
 
     setIsLoadingHistory(true);
-
     try {
       const history = await getMessagesUseCase.execute(peerId, 200);
       const ui = (history.messages ?? []).map(toUiMessage);
+
       setMessages(sortNewestFirst(uniqueByIdPreferDelivered(ui)));
+      scrollToBottom(false);
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'No se pudo cargar el historial del chat');
     } finally {
       setIsLoadingHistory(false);
     }
-  }, [getMessagesUseCase, peerId, toUiMessage]);
+  }, [getMessagesUseCase, peerId, scrollToBottom, toUiMessage]);
 
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
 
   /**
-   * ✅ Cuando aparece/desaparece el teclado, empujamos también la lista.
-   * Esto evita que el último mensaje quede tapado (especialmente en Android "overlay").
+   * ✅ Mantener último mensaje visible cuando cambia teclado (WhatsApp-like)
    */
   useEffect(() => {
     if (!isAtBottomRef.current) return;
-
-    // Pequeño delay para que RN tenga el layout final después del cambio de teclado
-    const delay = Platform.OS === 'ios' ? 60 : 20;
-    const t = setTimeout(() => scrollToBottom(false), delay);
+    const t = setTimeout(() => scrollToBottom(false), Platform.OS === 'ios' ? 60 : 20);
     return () => clearTimeout(t);
-  }, [keyboard.isVisible, composerBottom, scrollToBottom]);
+  }, [composerBottom, keyboard.isVisible, scrollToBottom]);
 
   /**
    * ✅ Polling (sin WS)
@@ -266,19 +294,137 @@ export function ChatScreen() {
         const onlyNew = latestUi.filter((m) => !existingIds.has(m.id));
         if (!onlyNew.length) return prev;
 
+        if (isAtBottomRef.current) {
+          requestAnimationFrame(() => scrollToBottom(false));
+        }
+
         return sortNewestFirst(uniqueByIdPreferDelivered([...onlyNew, ...prev]));
       });
     },
   });
 
   /**
-   * ✅ Enviar mensaje (optimista)
+   * =============================================================================
+   * ✅ Adjuntos (Pickers + Preview)
+   * =============================================================================
+   */
+
+  const addPendingAttachments = useCallback((items: LocalAttachment[]) => {
+    setPendingAttachments((prev) => {
+      const merged = [...prev, ...items];
+
+      // ✅ Limitar cantidad
+      if (merged.length > MAX_ATTACHMENTS_PER_MESSAGE) {
+        return merged.slice(0, MAX_ATTACHMENTS_PER_MESSAGE);
+      }
+      return merged;
+    });
+  }, []);
+
+  const removePendingAttachment = useCallback((id: string) => {
+    setPendingAttachments((prev) => prev.filter((a) => a.id !== id));
+  }, []);
+
+  const openAttachMenu = useCallback(() => {
+    setIsAttachSheetOpen(true);
+  }, []);
+
+  const pickImagesFromGallery = useCallback(async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permiso requerido', 'Debes permitir acceso a galería.');
+        return;
+      }
+
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.9,
+        allowsMultipleSelection: true,
+        selectionLimit: MAX_ATTACHMENTS_PER_MESSAGE,
+      });
+
+      if (res.canceled) return;
+
+      const items: LocalAttachment[] = res.assets.map((a, idx) => {
+        const name = a.fileName ?? `imagen_${Date.now()}_${idx}.jpg`;
+        const size = (a as any).fileSize as number | undefined;
+
+        return {
+          id: `att-img-${Date.now()}-${idx}`,
+          kind: 'image',
+          uri: a.uri,
+          name,
+          mimeType: a.mimeType ?? 'image/jpeg',
+          size,
+          width: a.width,
+          height: a.height,
+        };
+      });
+
+      const tooLarge = items.find((x) => (x.size ?? 0) > MAX_FILE_SIZE_BYTES);
+      if (tooLarge) {
+        Alert.alert('Archivo muy grande', `Máximo permitido: 25MB.`);
+        return;
+      }
+
+      addPendingAttachments(items);
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'No se pudo abrir la galería');
+    }
+  }, [addPendingAttachments]);
+
+  const pickDocuments = useCallback(async () => {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+
+      if (res.canceled) return;
+
+      const items: LocalAttachment[] = res.assets.map((a, idx) => ({
+        id: `att-doc-${Date.now()}-${idx}`,
+        kind: 'file',
+        uri: a.uri,
+        name: a.name,
+        mimeType: a.mimeType ?? 'application/octet-stream',
+        size: a.size,
+      }));
+
+      const tooLarge = items.find((x) => (x.size ?? 0) > MAX_FILE_SIZE_BYTES);
+      if (tooLarge) {
+        Alert.alert('Archivo muy grande', `Máximo permitido: 25MB.`);
+        return;
+      }
+
+      addPendingAttachments(items);
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'No se pudo abrir documentos');
+    }
+  }, [addPendingAttachments]);
+
+  /**
+   * ✅ Enviar mensaje (texto + adjuntos) con optimistic UI
    */
   const handleSend = useCallback(async () => {
     const value = text.trim();
-    if (!value || !peerId) return;
+    if (!peerId) return;
+
+    const hasAttachments = pendingAttachments.length > 0;
+    const isEmpty = !value && !hasAttachments;
+    if (isEmpty) return;
 
     const optimisticId = `local-${Date.now()}`;
+
+    const optimisticAttachments: UiAttachment[] = pendingAttachments.map((a) => ({
+      id: a.id,
+      kind: a.kind,
+      uri: a.uri,
+      name: a.name,
+      mimeType: a.mimeType,
+      size: a.size,
+    }));
 
     const optimisticMsg: UiChatMessage = {
       id: optimisticId,
@@ -286,14 +432,27 @@ export function ChatScreen() {
       createdAt: new Date(),
       from: 'me',
       status: 'sending',
+      attachments: optimisticAttachments.length ? optimisticAttachments : undefined,
     };
 
     setMessages((prev) => sortNewestFirst(uniqueByIdPreferDelivered([optimisticMsg, ...prev])));
     setText('');
+    setPendingAttachments([]);
     setIsSending(true);
 
     try {
-      const result = await sendMessageUseCase.execute(peerId, value);
+      const outgoingAttachments: OutgoingAttachment[] = pendingAttachments.map((a) => ({
+        uri: a.uri,
+        name: a.name,
+        mimeType: a.mimeType,
+        size: a.size,
+        kind: a.kind,
+      }));
+
+      const result = await sendMessageUseCase.execute(peerId, {
+        text: value,
+        attachments: outgoingAttachments,
+      });
 
       const incoming = (result.created ?? []).map((m: ApiChatMessage) => {
         const ui = toUiMessage(m);
@@ -305,67 +464,109 @@ export function ChatScreen() {
         const withoutOptimistic = prev.filter((m) => m.id !== optimisticId);
         return sortNewestFirst(uniqueByIdPreferDelivered([...incoming, ...withoutOptimistic]));
       });
+
+      if (isAtBottomRef.current) scrollToBottom(false);
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'No se pudo enviar el mensaje');
     } finally {
       setIsSending(false);
     }
-  }, [peerId, sendMessageUseCase, text, toUiMessage]);
+  }, [
+    peerId,
+    pendingAttachments,
+    scrollToBottom,
+    sendMessageUseCase,
+    text,
+    toUiMessage,
+  ]);
+
+  /**
+   * ✅ Abrir adjuntos
+   */
+  const openImage = useCallback((uri: string) => {
+    setPreviewImageUri(uri);
+  }, []);
+
+  const openFile = useCallback(async (uri: string) => {
+    try {
+      await Linking.openURL(uri);
+    } catch {
+      Alert.alert('Error', 'No se pudo abrir el archivo');
+    }
+  }, []);
 
   /**
    * ✅ Render mensaje
    */
-  const renderItem = useCallback(({ item }: { item: UiChatMessage }) => {
-    const isMe = item.from === 'me';
+  const renderItem = useCallback(
+    ({ item }: { item: UiChatMessage }) => {
+      const isMe = item.from === 'me';
+      const hasAttachments = (item.attachments ?? []).length > 0;
+      const hasText = (item.text ?? '').trim().length > 0;
 
-    return (
-      <View style={[styles.messageRow, isMe ? styles.messageRight : styles.messageLeft]}>
-        <View style={[styles.messageStack, isMe ? styles.stackRight : styles.stackLeft]}>
-          <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
-            {/* ✅ Colita suave */}
-            {isMe ? (
-              <>
-                <View style={styles.tailBaseRight} />
-                <View style={styles.tailCutRight} />
-              </>
-            ) : (
-              <>
-                <View style={styles.tailBaseLeft} />
-                <View style={styles.tailCutLeft} />
-              </>
-            )}
-
-            <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextOther]}>
-              {item.text}
-            </Text>
-
-            <View style={styles.bubbleFooter}>
-              <Text style={[styles.timeInBubble, isMe ? styles.timeInBubbleMe : styles.timeInBubbleOther]}>
-                {formatTime(item.createdAt)}
-              </Text>
-
-              {isMe && (
+      return (
+        <View style={[styles.messageRow, isMe ? styles.messageRight : styles.messageLeft]}>
+          <View style={[styles.messageStack, isMe ? styles.stackRight : styles.stackLeft]}>
+            <View style={[styles.bubble, isMe ? styles.bubbleMe : styles.bubbleOther]}>
+              {/* ✅ Colita suave */}
+              {isMe ? (
                 <>
-                  {item.status === 'sending' ? (
-                    <Ionicons name="time-outline" size={14} color="rgba(255,255,255,0.85)" />
-                  ) : (
-                    <Ionicons
-                      name="checkmark-done"
-                      size={16}
-                      color="rgba(255,255,255,0.90)"
-                      style={styles.checkIconMe}
-                    />
-                  )}
+                  <View style={styles.tailBaseRight} />
+                  <View style={styles.tailCutRight} />
+                </>
+              ) : (
+                <>
+                  <View style={styles.tailBaseLeft} />
+                  <View style={styles.tailCutLeft} />
                 </>
               )}
+
+              {/* ✅ Adjuntos */}
+              {hasAttachments && (
+                <MessageAttachments
+                  attachments={item.attachments ?? []}
+                  onOpenImage={openImage}
+                  onOpenFile={openFile}
+                />
+              )}
+
+              {/* ✅ Texto */}
+              {hasText && (
+                <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextOther]}>
+                  {item.text}
+                </Text>
+              )}
+
+              <View style={styles.bubbleFooter}>
+                <Text style={[styles.timeInBubble, isMe ? styles.timeInBubbleMe : styles.timeInBubbleOther]}>
+                  {formatTime(item.createdAt)}
+                </Text>
+
+                {isMe && (
+                  <>
+                    {item.status === 'sending' ? (
+                      <Ionicons name="time-outline" size={14} color="rgba(255,255,255,0.85)" />
+                    ) : (
+                      <Ionicons
+                        name="checkmark-done"
+                        size={16}
+                        color="rgba(255,255,255,0.90)"
+                        style={styles.checkIconMe}
+                      />
+                    )}
+                  </>
+                )}
+              </View>
             </View>
           </View>
         </View>
-      </View>
-    );
-  }, []);
+      );
+    },
+    [openFile, openImage],
+  );
 
   const isEmpty = text.trim().length === 0;
+  const canSend = !(isEmpty && pendingAttachments.length === 0);
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
@@ -421,34 +622,26 @@ export function ChatScreen() {
             refreshing={isLoadingHistory}
             onRefresh={loadHistory}
             onScroll={(e) => {
-              /**
-               * ✅ Con lista invertida:
-               * - offsetY 0 = bottom
-               * - a mayor offsetY, más arriba (mensajes antiguos)
-               */
               const y = e.nativeEvent.contentOffset.y;
               isAtBottomRef.current = y <= 25;
             }}
             onContentSizeChange={() => {
-              // ✅ Si el usuario está al final, mantenemos el último mensaje visible.
               if (isAtBottomRef.current) scrollToBottom(false);
             }}
             contentContainerStyle={[
               styles.listContent,
               {
                 /**
-                 * ✅ Importante con FlatList invertida:
-                 * el "espacio" para el input absoluto debe ir en paddingTop.
-                 *
-                 * ✅ Además, cuando el teclado hace overlay (Android),
-                 * debemos sumar composerBottom para empujar los mensajes hacia arriba.
+                 * ✅ Ajuste WhatsApp:
+                 * - InputBar es absoluto y se mueve con teclado
+                 * - Lista sube con paddingTop (porque inverted)
                  */
                 paddingTop: composerHeight + composerBottom + 18,
               },
             ]}
           />
 
-          {/* ✅ Input absoluto (sube con teclado + emoji bar) */}
+          {/* ✅ Composer */}
           <View
             onLayout={(e) => setComposerHeight(e.nativeEvent.layout.height)}
             style={[
@@ -459,25 +652,73 @@ export function ChatScreen() {
               },
             ]}
           >
-            <TextInput
-              value={text}
-              onChangeText={setText}
-              placeholder="Escribe un mensaje..."
-              placeholderTextColor="#6b6b6b"
-              style={styles.input}
-              multiline
+            {/* ✅ Preview adjuntos */}
+            <AttachmentPreviewBar
+              attachments={pendingAttachments}
+              onRemove={removePendingAttachment}
             />
 
-            <Pressable
-              onPress={handleSend}
-              disabled={isEmpty || isSending}
-              style={[styles.sendBtn, (isEmpty || isSending) && styles.sendBtnDisabled]}
-            >
-              <Ionicons name="send" size={18} color="#fff" />
-            </Pressable>
+            {/* ✅ Contador pro (WhatsApp-like) */}
+            {pendingAttachments.length > 0 && (
+              <Text style={styles.attachCounterText}>
+                {pendingAttachments.length}/{MAX_ATTACHMENTS_PER_MESSAGE}
+              </Text>
+            )}
+
+            <View style={styles.composerRow}>
+              <Pressable onPress={openAttachMenu} style={styles.attachBtn} hitSlop={10}>
+                <Ionicons name="attach" size={18} color="#0b2b52" />
+              </Pressable>
+
+              <TextInput
+                value={text}
+                onChangeText={setText}
+                placeholder="Escribe un mensaje..."
+                placeholderTextColor="#6b6b6b"
+                style={styles.input}
+                multiline
+              />
+
+              <Pressable
+                onPress={handleSend}
+                disabled={!canSend || isSending}
+                style={[styles.sendBtn, (!canSend || isSending) && styles.sendBtnDisabled]}
+              >
+                <Ionicons name="send" size={18} color="#fff" />
+              </Pressable>
+            </View>
           </View>
         </View>
       </View>
+
+      {/* ✅ Modal preview imagen */}
+      <Modal
+        visible={Boolean(previewImageUri)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewImageUri(null)}
+      >
+        <View style={styles.imagePreviewOverlay}>
+          <Pressable style={styles.imagePreviewClose} onPress={() => setPreviewImageUri(null)} hitSlop={10}>
+            <Ionicons name="close" size={26} color="#fff" />
+          </Pressable>
+
+          {previewImageUri && (
+            <Image
+              source={{ uri: previewImageUri }}
+              style={styles.imagePreviewFull}
+              resizeMode="contain"
+            />
+          )}
+        </View>
+      </Modal>
+       {/* ✅ Attach Sheet estilo WhatsApp */}
+      <AttachSheet
+        visible={isAttachSheetOpen}
+        onClose={() => setIsAttachSheetOpen(false)}
+        onPickImages={pickImagesFromGallery}
+        onPickDocuments={pickDocuments}
+      />
     </SafeAreaView>
   );
 }

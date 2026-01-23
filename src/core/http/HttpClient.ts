@@ -17,9 +17,10 @@ export type HttpClient = {
 };
 
 /**
- * Cliente HTTP base sobre fetch:
- * - Tipado genérico
- * - Manejo consistente de errores
+ * ✅ Cliente HTTP base sobre fetch
+ * - Soporta JSON (default)
+ * - Soporta FormData (uploads de archivos)
+ * - Manejo consistente de errores (HttpError)
  */
 export function createHttpClient(baseUrl: string = ENV.API_BASE_URL): HttpClient {
   // ✅ Normalizamos baseUrl por seguridad (sin slash final)
@@ -34,15 +35,26 @@ export function createHttpClient(baseUrl: string = ENV.API_BASE_URL): HttpClient
     ): Promise<TResponse> {
       const url = buildUrl(normalizedBaseUrl, path);
 
+      // ✅ Detecta si estamos enviando archivos (multipart)
+      const isForm = isFormData(body);
+
+      // ✅ Si es FormData NO se debe setear Content-Type manualmente.
+      // Fetch agrega el boundary automáticamente.
+      const finalHeaders: Record<string, string> = {
+        ...(isForm ? {} : { 'Content-Type': 'application/json' }),
+        ...headers,
+      };
+
+      const finalBody =
+        body === undefined ? undefined : isForm ? (body as any) : JSON.stringify(body);
+
       let res: Response;
+
       try {
         res = await fetch(url, {
           method,
-          headers: {
-            'Content-Type': 'application/json',
-            ...headers,
-          },
-          body: body !== undefined ? JSON.stringify(body) : undefined,
+          headers: finalHeaders,
+          body: finalBody,
         });
       } catch (e: any) {
         // ✅ Este catch resuelve el típico: "Network request failed"
@@ -61,6 +73,7 @@ export function createHttpClient(baseUrl: string = ENV.API_BASE_URL): HttpClient
       const text = await res.text();
       const payload = text ? safeJsonParse(text) : undefined;
 
+      // ✅ Si no es OK, convertimos a HttpError tipado
       if (!res.ok) {
         const message =
           (payload as any)?.message ||
@@ -78,7 +91,7 @@ export function createHttpClient(baseUrl: string = ENV.API_BASE_URL): HttpClient
 }
 
 /**
- * ✅ Asegura que baseUrl no termine en slash.
+ * ✅ Helpers
  */
 function normalizeBaseUrl(url: string): string {
   return url.replace(/\/$/, '');
@@ -98,4 +111,14 @@ function safeJsonParse(text: string) {
   } catch {
     return text;
   }
+}
+
+/**
+ * ✅ Detecta FormData de forma segura (sin romper entornos donde no exista FormData)
+ */
+function isFormData(body: unknown): boolean {
+  // @ts-ignore
+  if (typeof FormData === 'undefined') return false;
+  // @ts-ignore
+  return body instanceof FormData;
 }

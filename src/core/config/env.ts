@@ -36,4 +36,11 @@ export const ENV = {
    * - POST /chat/:peerId/messages
    */
   CHAT_PATH: '/chat',
+
+  /**
+   * ✅ Archivos públicos (servidos por el backend)
+   * Ej:
+   * - /uploads/chat/<file>
+   */
+  UPLOADS_PATH: '/uploads',
 } as const;

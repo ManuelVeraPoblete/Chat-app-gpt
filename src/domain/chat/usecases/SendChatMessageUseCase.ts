@@ -1,18 +1,29 @@
-import type { SendMessageResult } from '../entities/ChatMessage';
 import type { ChatRepository } from '../repositories/ChatRepository';
+import type { SendChatMessagePayload, SendMessageResult } from '../entities/ChatMessage';
 
 /**
- * Caso de uso: enviar un mensaje.
+ * ✅ Caso de Uso: Enviar mensaje (texto y/o adjuntos)
+ *
+ * Principios:
+ * - SRP: este usecase valida y delega al repo
+ * - Clean Code: reglas claras (no enviar vacío)
  */
 export class SendChatMessageUseCase {
   constructor(private readonly repo: ChatRepository) {}
 
-  async execute(peerId: string, text: string): Promise<SendMessageResult> {
-    const safeText = (text ?? '').trim();
-    if (!safeText) {
+  async execute(peerId: string, payload: SendChatMessagePayload): Promise<SendMessageResult> {
+    const safeText = (payload?.text ?? '').trim();
+    const attachments = payload?.attachments ?? [];
+
+    // ✅ No permitir enviar vacío
+    const isEmpty = safeText.length === 0 && attachments.length === 0;
+    if (isEmpty) {
       return { created: [] };
     }
 
-    return this.repo.sendMessage(peerId, safeText);
+    return this.repo.sendMessage(peerId, {
+      text: safeText,
+      attachments,
+    });
   }
 }

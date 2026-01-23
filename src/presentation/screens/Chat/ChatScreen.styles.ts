@@ -8,6 +8,9 @@ import { StyleSheet } from 'react-native';
  * ✅ Hora dentro de burbuja
  * ✅ Checks (✅✅) para mensajes enviados
  * ✅ Input absoluto (se sube con el teclado)
+ * ✅ Preview de adjuntos (antes de enviar)
+ * ✅ Adjuntos dentro del mensaje (imágenes + archivos)
+ * ✅ Modal preview de imagen full-screen
  */
 export const styles = StyleSheet.create({
   safe: {
@@ -89,7 +92,7 @@ export const styles = StyleSheet.create({
   chatBody: {
     flex: 1,
     backgroundColor: '#d9ecff',
-    position: 'relative', // ✅ requerido para input absoluto
+    position: 'relative',
   },
 
   container: {
@@ -133,7 +136,7 @@ export const styles = StyleSheet.create({
   },
 
   messageStack: {
-    maxWidth: '82%',
+    maxWidth: '84%',
   },
 
   stackLeft: {
@@ -247,13 +250,34 @@ export const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+
     paddingHorizontal: 10,
     paddingTop: 10,
+
     backgroundColor: '#cfe6ff',
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.06)',
+  },
+
+  /**
+   * ✅ Fila principal del composer:
+   * [📎] [input multiline] [send]
+   */
+  composerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 10,
+  },
+
+  attachBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#fcfcfc',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
   },
 
   input: {
@@ -276,10 +300,249 @@ export const styles = StyleSheet.create({
     backgroundColor: '#2b69a6',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 10,
   },
 
   sendBtnDisabled: {
     opacity: 0.5,
   },
+
+  /**
+   * ✅ Preview de adjuntos (antes de enviar)
+   */
+  attachPreviewContainer: {
+    width: '100%',
+    marginBottom: 8,
+  },
+
+  attachPreviewScroll: {
+    gap: 10,
+    paddingRight: 8,
+  },
+
+  attachPreviewItem: {
+    width: 90,
+    height: 70,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#fcfcfc',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    position: 'relative',
+  },
+
+  attachPreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+
+  attachPreviewFile: {
+    flex: 1,
+    padding: 8,
+    gap: 4,
+    justifyContent: 'center',
+  },
+
+  attachPreviewFileName: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0b2b52',
+  },
+
+  attachPreviewFileSize: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(11,43,82,0.60)',
+  },
+
+  attachRemoveBtn: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  /**
+   * ✅ Adjuntos dentro del mensaje
+   */
+  msgAttachmentsWrap: {
+    marginBottom: 8,
+    gap: 10,
+  },
+
+  msgImagesRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+
+  msgImagePress: {
+    width: 74,
+    height: 74,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#eaf4ff',
+  },
+
+  msgImageThumb: {
+    width: '100%',
+    height: '100%',
+  },
+
+  msgImageMoreOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  msgImageMoreText: {
+    color: '#fff',
+    fontWeight: '900',
+    fontSize: 18,
+  },
+
+  msgFilesCol: {
+    gap: 8,
+  },
+
+  msgFileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+  },
+
+  msgFileMeta: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  msgFileName: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#0b2b52',
+  },
+
+  msgFileSize: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(11,43,82,0.60)',
+    marginTop: 2,
+  },
+
+  /**
+   * ✅ Modal preview imagen
+   */
+  imagePreviewOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  imagePreviewClose: {
+    position: 'absolute',
+    top: 50,
+    right: 18,
+    zIndex: 10,
+  },
+
+  imagePreviewFull: {
+    width: '92%',
+    height: '78%',
+  },
+
+    /**
+   * ✅ AttachSheet (modal inferior estilo WhatsApp)
+   */
+  attachSheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+    padding: 14,
+  },
+
+  attachSheetCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    padding: 14,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+  },
+
+  attachSheetTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#0b2b52',
+  },
+
+  attachSheetRow: {
+    flexDirection: 'row',
+    gap: 14,
+  },
+
+  attachSheetItem: {
+    flex: 1,
+    backgroundColor: '#f6fbff',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+  },
+
+  attachSheetIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+  },
+
+  attachSheetText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0b2b52',
+  },
+
+  attachSheetCancel: {
+    marginTop: 4,
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eaf4ff',
+  },
+
+  attachSheetCancelText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#2b69a6',
+  },
+    /**
+   * ✅ Contador de adjuntos (ej: 3/10)
+   */
+  attachCounterText: {
+    marginTop: 6,
+    marginLeft: 6,
+    fontSize: 12,
+    fontWeight: '800',
+    color: 'rgba(11,43,82,0.55)',
+  },
+
 });

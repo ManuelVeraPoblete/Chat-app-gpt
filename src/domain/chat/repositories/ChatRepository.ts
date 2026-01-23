@@ -1,20 +1,21 @@
-import type { ChatHistory, SendMessageResult } from '../entities/ChatMessage';
+import type { ChatHistory, SendChatMessagePayload, SendMessageResult } from '../entities/ChatMessage';
 
 /**
- * Contrato del repositorio de chat.
+ * ✅ Contrato de repositorio de Chat
  *
- * ✅ La capa de presentación (UI) depende solo de esta interfaz,
- * no de HTTP ni de detalles de infraestructura.
+ * Principios aplicados:
+ * - DIP: la UI depende de esta interfaz, no de HTTP
+ * - SRP: el repositorio solo sabe "obtener/enviar mensajes", sin lógica de UI
  */
 export interface ChatRepository {
   /**
-   * Obtiene historial entre el usuario logueado y el peer seleccionado.
+   * ✅ Obtiene mensajes con el peerId (usuario con el que estoy chateando)
+   * Se recomienda newest-first para FlatList inverted
    */
   getMessages(peerId: string, limit?: number): Promise<ChatHistory>;
 
   /**
-   * Envía un mensaje al peer.
-   * El backend devuelve los mensajes creados (usuario + opcional assistant).
+   * ✅ Envía mensaje con texto y/o adjuntos
    */
-  sendMessage(peerId: string, text: string): Promise<SendMessageResult>;
+  sendMessage(peerId: string, payload: SendChatMessagePayload): Promise<SendMessageResult>;
 }
