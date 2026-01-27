@@ -6,12 +6,6 @@ import { getApiBaseUrl } from '../../shared/config/apiBaseUrl';
  * Objetivo:
  * - Centralizar endpoints y configuración
  * - Evitar hardcodear `localhost` (en Android físico SIEMPRE falla)
- *
- * Cómo se resuelve la URL base:
- * 1) `EXPO_PUBLIC_API_URL` desde `.env` (RECOMENDADO)
- * 2) `extra.API_BASE_URL` desde app.config / app.json
- * 3) Detección automática por Expo (hostUri)
- * 4) Fallbacks por plataforma
  */
 export const ENV = {
   /**
@@ -21,26 +15,30 @@ export const ENV = {
   API_BASE_URL: getApiBaseUrl(),
 
   /**
-   * ✅ Refresh tokens
+   * ✅ Auth
    */
   AUTH_REFRESH_PATH: '/auth/refresh',
 
   /**
-   * ✅ Endpoint para traer usuarios desde la BD
+   * ✅ Usuarios
    */
   USERS_PATH: '/users',
 
   /**
-   * ✅ Base path del módulo de chat
-   * - GET  /chat/:peerId/messages?limit=200
-   * - POST /chat/:peerId/messages
+   * ✅ Chat
    */
   CHAT_PATH: '/chat',
 
   /**
-   * ✅ Archivos públicos (servidos por el backend)
-   * Ej:
-   * - /uploads/chat/<file>
+   * ✅ Ubicaciones (geolocalización)
+   * - POST   /locations/me
+   * - DELETE /locations/me
+   * - GET    /locations/active
+   */
+  LOCATIONS_PATH: '/locations',
+
+  /**
+   * ✅ Archivos públicos
    */
   UPLOADS_PATH: '/uploads',
 } as const;

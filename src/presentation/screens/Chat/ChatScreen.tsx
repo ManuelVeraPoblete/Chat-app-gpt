@@ -13,7 +13,6 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AttachSheet } from './components/AttachSheet';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
@@ -21,6 +20,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import * as Location from 'expo-location';
 
 import { styles } from './ChatScreen.styles';
 import { Routes } from '../../navigation/routes';
@@ -39,13 +39,19 @@ import { GetChatMessagesUseCase } from '../../../domain/chat/GetChatMessagesUseC
 import { SendChatMessageUseCase } from '../../../domain/chat/usecases/SendChatMessageUseCase';
 
 import type {
+  ChatAttachment,
   ChatMessage as ApiChatMessage,
   OutgoingAttachment,
+  OutgoingLocation,
 } from '../../../domain/chat/entities/ChatMessage';
 
 import type { LocalAttachment } from './types/localAttachment.types';
 import { AttachmentPreviewBar } from './components/AttachmentPreviewBar';
 import { MessageAttachments, type UiAttachment } from './components/MessageAttachments';
+import { AttachSheet } from './components/AttachSheet';
+
+// ✅ Tarjeta de ubicación WhatsApp-like (con mini mapa)
+import { LocationMessageCard } from './components/LocationMessageCard';
 
 /**
  * ✅ Tipos de navegación
@@ -62,6 +68,7 @@ type UiChatMessage = {
   from: 'me' | 'other';
   status?: SendStatus;
   attachments?: UiAttachment[];
+  location?: OutgoingLocation; // ✅ NUEVO: ubicación en UI
 };
 
 /**
@@ -78,6 +85,7 @@ const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25MB
 export function ChatScreen() {
   const navigation = useNavigation<ChatNav>();
   const route = useRoute<ChatRoute>();
+
   const [isAttachSheetOpen, setIsAttachSheetOpen] = useState(false);
 
   const insets = useSafeAreaInsets();
@@ -87,9 +95,7 @@ export function ChatScreen() {
   const { http } = useApi();
   const { session } = useAuth();
 
-  // ✅ Params del chat
   const { displayName, userId: peerId, email } = route.params;
-
   const myUserId = session?.user?.id ?? '';
 
   const [messages, setMessages] = useState<UiChatMessage[]>([]);
@@ -105,15 +111,12 @@ export function ChatScreen() {
 
   /**
    * ✅ Ref scroll (lista invertida)
-   * offset=0 => último mensaje visible
    */
   const listRef = useRef<FlatList<UiChatMessage>>(null);
   const isAtBottomRef = useRef(true);
 
   /**
-   * ✅ Composer height (para paddingTop de la lista)
-   * - El inputBar es absoluto
-   * - Para que la lista suba y el último mensaje quede visible (WhatsApp)
+   * ✅ Composer height para que la lista suba igual que WhatsApp
    */
   const [composerHeight, setComposerHeight] = useState(72);
 
@@ -129,7 +132,7 @@ export function ChatScreen() {
   }, [keyboard.isVisible, windowHeight]);
 
   /**
-   * ✅ Si Android está haciendo resize real (adjustResize), no movemos con bottom manual
+   * ✅ Si Android está haciendo resize real, no movemos bottom manual
    */
   const isSystemResizing = keyboard.isVisible && windowHeight < baseHeightRef.current - 80;
 
@@ -155,7 +158,7 @@ export function ChatScreen() {
   const sendMessageUseCase = useMemo(() => new SendChatMessageUseCase(chatRepo), [chatRepo]);
 
   /**
-   * ✅ Fondo con patrón (dots)
+   * ✅ Fondo con patrón
    */
   const PatternBackground = useCallback(() => {
     const dots = Array.from({ length: 280 });
@@ -169,7 +172,7 @@ export function ChatScreen() {
   }, []);
 
   /**
-   * ✅ Navega al perfil (si lo tienes implementado)
+   * ✅ Navega al perfil
    */
   const openUserProfile = useCallback(() => {
     if (!peerId) return;
@@ -190,7 +193,7 @@ export function ChatScreen() {
   }, []);
 
   /**
-   * ✅ Construye URL absoluta si backend manda relativa
+   * ✅ Construye URL absoluta
    */
   const toAbsoluteUrl = useCallback((url: string): string => {
     if (!url) return url;
@@ -199,22 +202,50 @@ export function ChatScreen() {
   }, []);
 
   /**
-   * ✅ Convert API -> UI
+   * ✅ Convierte attachments backend -> UI
    */
-  const toUiMessage = useCallback(
-    (apiMsg: ApiChatMessage): UiChatMessage => {
-      const createdAt = apiMsg.createdAt ? new Date(apiMsg.createdAt) : new Date();
-      const isMe = apiMsg.senderId === myUserId;
+  const mapAttachmentsToUi = useCallback(
+    (attachments?: ChatAttachment[]): { ui: UiAttachment[]; location?: OutgoingLocation } => {
+      if (!attachments?.length) return { ui: [] };
 
-      const uiAttachments: UiAttachment[] =
-        (apiMsg.attachments ?? []).map((a) => ({
+      const ui: UiAttachment[] = [];
+      let location: OutgoingLocation | undefined;
+
+      for (const a of attachments) {
+        if (a.kind === 'LOCATION') {
+          location = {
+            latitude: a.latitude,
+            longitude: a.longitude,
+            label: a.label ?? undefined,
+          };
+          continue;
+        }
+
+        // ✅ IMAGE / FILE
+        ui.push({
           id: a.id,
           kind: a.kind === 'IMAGE' ? 'image' : 'file',
           uri: toAbsoluteUrl(a.url),
           name: a.fileName,
           mimeType: a.mimeType,
           size: a.fileSize,
-        })) ?? [];
+        });
+      }
+
+      return { ui, location };
+    },
+    [toAbsoluteUrl],
+  );
+
+  /**
+   * ✅ Convert API -> UI message
+   */
+  const toUiMessage = useCallback(
+    (apiMsg: ApiChatMessage): UiChatMessage => {
+      const createdAt = apiMsg.createdAt ? new Date(apiMsg.createdAt) : new Date();
+      const isMe = apiMsg.senderId === myUserId;
+
+      const { ui, location } = mapAttachmentsToUi(apiMsg.attachments);
 
       return {
         id: apiMsg.id,
@@ -222,10 +253,87 @@ export function ChatScreen() {
         createdAt,
         from: isMe ? 'me' : 'other',
         status: isMe ? 'delivered' : undefined,
-        attachments: uiAttachments.length ? uiAttachments : undefined,
+        attachments: ui.length ? ui : undefined,
+        location,
       };
     },
-    [myUserId, toAbsoluteUrl],
+    [mapAttachmentsToUi, myUserId],
+  );
+
+  /**
+   * ✅ Envío unificado con optimistic UI
+   */
+  const sendWithOptimistic = useCallback(
+    async (payload: { text: string; attachments?: LocalAttachment[]; location?: OutgoingLocation }) => {
+      if (!peerId) return;
+
+      const value = (payload.text ?? '').trim();
+      const localAttachments = payload.attachments ?? [];
+      const hasLocation = Boolean(payload.location);
+
+      const hasAttachments = localAttachments.length > 0;
+      const isEmpty = !value && !hasAttachments && !hasLocation;
+      if (isEmpty) return;
+
+      const optimisticId = `local-${Date.now()}`;
+
+      const optimisticAttachments: UiAttachment[] = localAttachments.map((a) => ({
+        id: a.id,
+        kind: a.kind,
+        uri: a.uri,
+        name: a.name,
+        mimeType: a.mimeType,
+        size: a.size,
+      }));
+
+      const optimisticMsg: UiChatMessage = {
+        id: optimisticId,
+        text: value,
+        createdAt: new Date(),
+        from: 'me',
+        status: 'sending',
+        attachments: optimisticAttachments.length ? optimisticAttachments : undefined,
+        location: payload.location,
+      };
+
+      setMessages((prev) => sortNewestFirst(uniqueByIdPreferDelivered([optimisticMsg, ...prev])));
+      setIsSending(true);
+
+      try {
+        const outgoingAttachments: OutgoingAttachment[] = localAttachments.map((a) => ({
+          uri: a.uri,
+          name: a.name,
+          mimeType: a.mimeType,
+          size: a.size,
+          kind: a.kind,
+        }));
+
+        const result = await sendMessageUseCase.execute(peerId, {
+          text: value,
+          attachments: outgoingAttachments,
+          location: payload.location,
+        });
+
+        const incoming = (result.created ?? []).map((m: ApiChatMessage) => {
+          const ui = toUiMessage(m);
+          if (ui.from === 'me') ui.status = 'delivered';
+          return ui;
+        });
+
+        setMessages((prev) => {
+          const withoutOptimistic = prev.filter((m) => m.id !== optimisticId);
+          return sortNewestFirst(uniqueByIdPreferDelivered([...incoming, ...withoutOptimistic]));
+        });
+
+        if (isAtBottomRef.current) scrollToBottom(false);
+      } catch (e: any) {
+        setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+        Alert.alert('Error', e?.message ?? 'No se pudo enviar el mensaje');
+      } finally {
+        setIsSending(false);
+      }
+    },
+    [peerId, scrollToBottom, sendMessageUseCase, toUiMessage],
   );
 
   /**
@@ -253,7 +361,7 @@ export function ChatScreen() {
   }, [loadHistory]);
 
   /**
-   * ✅ Mantener último mensaje visible cuando cambia teclado (WhatsApp-like)
+   * ✅ Mantener último mensaje visible con teclado (WhatsApp-like)
    */
   useEffect(() => {
     if (!isAtBottomRef.current) return;
@@ -262,7 +370,7 @@ export function ChatScreen() {
   }, [composerBottom, keyboard.isVisible, scrollToBottom]);
 
   /**
-   * ✅ Polling (sin WS)
+   * ✅ Polling
    */
   const isRefreshingRef = useRef(false);
 
@@ -305,15 +413,13 @@ export function ChatScreen() {
 
   /**
    * =============================================================================
-   * ✅ Adjuntos (Pickers + Preview)
+   * ✅ Adjuntos (Pickers)
    * =============================================================================
    */
 
   const addPendingAttachments = useCallback((items: LocalAttachment[]) => {
     setPendingAttachments((prev) => {
       const merged = [...prev, ...items];
-
-      // ✅ Limitar cantidad
       if (merged.length > MAX_ATTACHMENTS_PER_MESSAGE) {
         return merged.slice(0, MAX_ATTACHMENTS_PER_MESSAGE);
       }
@@ -405,7 +511,43 @@ export function ChatScreen() {
   }, [addPendingAttachments]);
 
   /**
-   * ✅ Enviar mensaje (texto + adjuntos) con optimistic UI
+   * ✅ NUEVO: compartir ubicación como adjunto LOCATION real
+   */
+  const shareCurrentLocation = useCallback(async () => {
+    try {
+      if (!peerId) return;
+      if (isSending) return;
+
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (perm.status !== 'granted') {
+        Alert.alert('Permiso requerido', 'Debes permitir ubicación para compartirla.');
+        return;
+      }
+
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const locationPayload: OutgoingLocation = {
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+      };
+
+      // ✅ Envío PRO: location como attachment real
+      await sendWithOptimistic({
+        text: '📍 Ubicación compartida',
+        attachments: [],
+        location: locationPayload,
+      });
+
+      if (isAtBottomRef.current) scrollToBottom(false);
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'No se pudo obtener tu ubicación');
+    }
+  }, [isSending, peerId, scrollToBottom, sendWithOptimistic]);
+
+  /**
+   * ✅ Enviar mensaje (texto + adjuntos)
    */
   const handleSend = useCallback(async () => {
     const value = text.trim();
@@ -415,70 +557,14 @@ export function ChatScreen() {
     const isEmpty = !value && !hasAttachments;
     if (isEmpty) return;
 
-    const optimisticId = `local-${Date.now()}`;
+    const attachmentsToSend = [...pendingAttachments];
 
-    const optimisticAttachments: UiAttachment[] = pendingAttachments.map((a) => ({
-      id: a.id,
-      kind: a.kind,
-      uri: a.uri,
-      name: a.name,
-      mimeType: a.mimeType,
-      size: a.size,
-    }));
-
-    const optimisticMsg: UiChatMessage = {
-      id: optimisticId,
-      text: value,
-      createdAt: new Date(),
-      from: 'me',
-      status: 'sending',
-      attachments: optimisticAttachments.length ? optimisticAttachments : undefined,
-    };
-
-    setMessages((prev) => sortNewestFirst(uniqueByIdPreferDelivered([optimisticMsg, ...prev])));
+    // ✅ Limpieza inmediata WhatsApp
     setText('');
     setPendingAttachments([]);
-    setIsSending(true);
 
-    try {
-      const outgoingAttachments: OutgoingAttachment[] = pendingAttachments.map((a) => ({
-        uri: a.uri,
-        name: a.name,
-        mimeType: a.mimeType,
-        size: a.size,
-        kind: a.kind,
-      }));
-
-      const result = await sendMessageUseCase.execute(peerId, {
-        text: value,
-        attachments: outgoingAttachments,
-      });
-
-      const incoming = (result.created ?? []).map((m: ApiChatMessage) => {
-        const ui = toUiMessage(m);
-        if (ui.from === 'me') ui.status = 'delivered';
-        return ui;
-      });
-
-      setMessages((prev) => {
-        const withoutOptimistic = prev.filter((m) => m.id !== optimisticId);
-        return sortNewestFirst(uniqueByIdPreferDelivered([...incoming, ...withoutOptimistic]));
-      });
-
-      if (isAtBottomRef.current) scrollToBottom(false);
-    } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'No se pudo enviar el mensaje');
-    } finally {
-      setIsSending(false);
-    }
-  }, [
-    peerId,
-    pendingAttachments,
-    scrollToBottom,
-    sendMessageUseCase,
-    text,
-    toUiMessage,
-  ]);
+    await sendWithOptimistic({ text: value, attachments: attachmentsToSend });
+  }, [peerId, pendingAttachments, sendWithOptimistic, text]);
 
   /**
    * ✅ Abrir adjuntos
@@ -496,7 +582,7 @@ export function ChatScreen() {
   }, []);
 
   /**
-   * ✅ Render mensaje
+   * ✅ Render mensaje (con tarjeta de ubicación)
    */
   const renderItem = useCallback(
     ({ item }: { item: UiChatMessage }) => {
@@ -520,6 +606,9 @@ export function ChatScreen() {
                   <View style={styles.tailCutLeft} />
                 </>
               )}
+
+              {/* ✅ Ubicación como tarjeta PRO */}
+              {item.location && <LocationMessageCard location={item.location} />}
 
               {/* ✅ Adjuntos */}
               {hasAttachments && (
@@ -565,8 +654,7 @@ export function ChatScreen() {
     [openFile, openImage],
   );
 
-  const isEmpty = text.trim().length === 0;
-  const canSend = !(isEmpty && pendingAttachments.length === 0);
+  const canSend = !(text.trim().length === 0 && pendingAttachments.length === 0);
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
@@ -631,11 +719,6 @@ export function ChatScreen() {
             contentContainerStyle={[
               styles.listContent,
               {
-                /**
-                 * ✅ Ajuste WhatsApp:
-                 * - InputBar es absoluto y se mueve con teclado
-                 * - Lista sube con paddingTop (porque inverted)
-                 */
                 paddingTop: composerHeight + composerBottom + 18,
               },
             ]}
@@ -653,21 +736,22 @@ export function ChatScreen() {
             ]}
           >
             {/* ✅ Preview adjuntos */}
-            <AttachmentPreviewBar
-              attachments={pendingAttachments}
-              onRemove={removePendingAttachment}
-            />
-
-            {/* ✅ Contador pro (WhatsApp-like) */}
-            {pendingAttachments.length > 0 && (
-              <Text style={styles.attachCounterText}>
-                {pendingAttachments.length}/{MAX_ATTACHMENTS_PER_MESSAGE}
-              </Text>
-            )}
+            <AttachmentPreviewBar attachments={pendingAttachments} onRemove={removePendingAttachment} />
 
             <View style={styles.composerRow}>
-              <Pressable onPress={openAttachMenu} style={styles.attachBtn} hitSlop={10}>
+              {/* 📎 Adjuntar */}
+              <Pressable onPress={() => setIsAttachSheetOpen(true)} style={styles.attachBtn} hitSlop={10}>
                 <Ionicons name="attach" size={18} color="#0b2b52" />
+              </Pressable>
+
+              {/* 📍 Ubicación PRO */}
+              <Pressable
+                onPress={shareCurrentLocation}
+                disabled={isSending}
+                style={[styles.attachBtn, isSending && styles.sendBtnDisabled]}
+                hitSlop={10}
+              >
+                <Ionicons name="location-outline" size={18} color="#0b2b52" />
               </Pressable>
 
               <TextInput
@@ -704,15 +788,12 @@ export function ChatScreen() {
           </Pressable>
 
           {previewImageUri && (
-            <Image
-              source={{ uri: previewImageUri }}
-              style={styles.imagePreviewFull}
-              resizeMode="contain"
-            />
+            <Image source={{ uri: previewImageUri }} style={styles.imagePreviewFull} resizeMode="contain" />
           )}
         </View>
       </Modal>
-       {/* ✅ Attach Sheet estilo WhatsApp */}
+
+      {/* ✅ Attach Sheet estilo WhatsApp */}
       <AttachSheet
         visible={isAttachSheetOpen}
         onClose={() => setIsAttachSheetOpen(false)}

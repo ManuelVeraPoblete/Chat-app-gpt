@@ -8,8 +8,10 @@ import { LoginScreen } from '../../presentation/screens/Login/LoginScreen';
 import { HomeScreen } from '../../presentation/screens/Home/HomeScreen';
 import { ChatScreen } from '../../presentation/screens/Chat/ChatScreen';
 
-// ✅ NUEVO: pantalla de perfil del usuario
 import UserProfileScreen from '../../presentation/screens/UserProfile/UserProfileScreen';
+
+// ✅ NUEVO: Mapa de conectados
+import { LocationsScreen } from '../../presentation/screens/Locations/LocationsScreen';
 
 /**
  * ✅ RootStackParamList
@@ -23,47 +25,54 @@ export type RootStackParamList = {
    * ✅ Chat recibe el usuario seleccionado desde Home
    */
   [Routes.Chat]: {
-    userId: string; // ✅ peerId (usuario con el que chateas)
+    userId: string; // ✅ peerId
     displayName: string;
     email?: string;
   };
 
   /**
-   * ✅ NUEVO: Perfil del usuario con el que estás chateando
-   * - userId: ID del usuario a consultar
-   * - accessToken: token JWT necesario para llamar GET /users/:id
-   * - displayName: opcional para mostrar en header si quieres
+   * ✅ Perfil del usuario con el que estás chateando
    */
   [Routes.UserProfile]: {
     userId: string;
     accessToken: string;
     displayName?: string;
   };
+
+  /**
+   * ✅ NUEVO: Mapa de usuarios conectados
+   */
+  [Routes.Locations]: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 /**
- * Navegación basada en estado de sesión:
- * - Si hay sesión => Home + Chat + UserProfile
+ * ✅ Navegación basada en estado de sesión:
+ * - Si hay session => Home + Chat + UserProfile + Locations
  * - Si no => Login
  */
 export function AppNavigator() {
   const { session, isBootstrapping } = useAuth();
 
+  // ✅ Mientras se cargan tokens desde storage
   if (isBootstrapping) {
-    // ✅ Mantén simple (puedes poner SplashScreen si quieres)
     return null;
   }
 
+  const isAuthenticated = !!session;
+
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {session ? (
+      {isAuthenticated ? (
         <>
           <Stack.Screen name={Routes.Home} component={HomeScreen} />
           <Stack.Screen name={Routes.Chat} component={ChatScreen} />
 
-          {/* ✅ NUEVO: Perfil Usuario */}
+          {/* ✅ Mapa de conectados */}
+          <Stack.Screen name={Routes.Locations} component={LocationsScreen} />
+
+          {/* ✅ Perfil con header visible */}
           <Stack.Screen
             name={Routes.UserProfile}
             component={UserProfileScreen}

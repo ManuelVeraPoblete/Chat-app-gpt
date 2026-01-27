@@ -2,8 +2,8 @@ import { StyleSheet } from 'react-native';
 
 /**
  * ✅ Estilos del HomeHeader
- * - Reducimos padding vertical para que NO se vea grueso
- * - Search más bajo
+ * - Header delgado
+ * - Botones con fondo sutil (look profesional)
  */
 export const styles = StyleSheet.create({
   header: {
@@ -11,9 +11,8 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
 
-    // ✅ esto controla el grosor del header
     paddingHorizontal: 12,
-    paddingVertical: 8, // 👈 antes seguro estaba mucho más alto
+    paddingVertical: 8,
     gap: 10,
   },
 
@@ -52,8 +51,6 @@ export const styles = StyleSheet.create({
 
   searchBox: {
     flex: 1,
-
-    // ✅ más bajo para que el header no crezca
     height: 36,
     borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.20)',
@@ -66,8 +63,6 @@ export const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     color: '#FFFFFF',
-
-    // ✅ evita que el input infle el alto del header
     paddingVertical: 0,
     fontSize: 14,
   },
@@ -78,5 +73,8 @@ export const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
+
+    // ✅ look corporativo pro
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
 });

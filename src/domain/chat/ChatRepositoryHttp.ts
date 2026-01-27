@@ -1,5 +1,6 @@
 import { ENV } from '../../core/config/env';
 import type { HttpClient } from '../../core/http/HttpClient';
+
 import type {
   ChatHistory,
   SendChatMessagePayload,
@@ -8,60 +9,105 @@ import type {
 import type { ChatRepository } from '../../domain/chat/repositories/ChatRepository';
 
 /**
- * ✅ Implementación HTTP del repositorio de chat.
+ * Implementación HTTP del repositorio de chat.
  *
- * Reglas:
- * - GET mensajes (historial)
- * - POST enviar mensaje:
- *    - JSON si es solo texto
- *    - FormData si hay adjuntos
+ * ✅ Usa el HttpClient autorizado (ApiContext) por lo que:
+ * - agrega Authorization automáticamente
+ * - refresca token si recibe 401
+ *
+ * ✅ Soporta:
+ * - Texto (JSON)
+ * - Ubicación (JSON o multipart)
+ * - Archivos/Imágenes (multipart/form-data)
  */
 export class ChatRepositoryHttp implements ChatRepository {
-  private static readonly MAX_FILES = 10;
-
   constructor(private readonly http: HttpClient) {}
 
   async getMessages(peerId: string, limit: number = 200): Promise<ChatHistory> {
+    // GET /chat/:peerId/messages?limit=200
     const path = `${ENV.CHAT_PATH}/${peerId}/messages?limit=${limit}`;
     return this.http.request<ChatHistory>(path, 'GET');
   }
 
-  async sendMessage(peerId: string, payload: SendChatMessagePayload): Promise<SendMessageResult> {
+  /**
+   * ✅ Overloads (Clean Architecture)
+   * - Mantiene compatibilidad con la versión antigua (texto)
+   * - Agrega soporte PRO: payload (texto + adjuntos + ubicación)
+   */
+  async sendMessage(peerId: string, text: string): Promise<SendMessageResult>;
+  async sendMessage(peerId: string, payload: SendChatMessagePayload): Promise<SendMessageResult>;
+  async sendMessage(
+    peerId: string,
+    input: string | SendChatMessagePayload,
+  ): Promise<SendMessageResult> {
     const path = `${ENV.CHAT_PATH}/${peerId}/messages`;
 
-    const safeText = (payload?.text ?? '').trim();
-    const attachments = payload?.attachments ?? [];
+    // ✅ Compatibilidad: sendMessage(peerId, "hola")
+    if (typeof input === 'string') {
+      const safeText = input.trim();
+      if (!safeText) return { created: [] };
 
-    // ✅ Guard: máximo WhatsApp-like
-    if (attachments.length > ChatRepositoryHttp.MAX_FILES) {
-      throw new Error(`Máximo permitido: ${ChatRepositoryHttp.MAX_FILES} archivos por mensaje.`);
+      return this.http.request<SendMessageResult, { text: string }>(path, 'POST', {
+        text: safeText,
+      });
     }
 
-    // ✅ Si hay adjuntos => multipart SIEMPRE
-    if (attachments.length > 0) {
-      const form = new FormData();
+    // ✅ Nuevo formato PRO: sendMessage(peerId, { text, attachments, location })
+    const safeText = (input.text ?? '').trim();
+    const hasFiles = (input.attachments?.length ?? 0) > 0;
+    const hasLocation = Boolean(input.location);
 
-      if (safeText.length > 0) {
-        form.append('text', safeText);
-      }
-
-      for (const f of attachments) {
-        form.append(
-          'files',
-          {
-            uri: f.uri,
-            name: f.name,
-            type: f.mimeType,
-          } as any,
-        );
-      }
-
-      return this.http.request<SendMessageResult, FormData>(path, 'POST', form);
+    // ✅ No enviamos requests vacíos
+    if (!safeText && !hasFiles && !hasLocation) {
+      return { created: [] };
     }
 
-    // ✅ Solo texto => JSON
-    return this.http.request<SendMessageResult, { text: string }>(path, 'POST', {
-      text: safeText,
-    });
+    /**
+     * ✅ Caso 1: Sin archivos => JSON
+     * (ideal para ubicación + texto)
+     */
+    if (!hasFiles) {
+      return this.http.request<SendMessageResult, { text: string; location?: any }>(path, 'POST', {
+        text: safeText,
+        location: input.location,
+      });
+    }
+
+    /**
+     * ✅ Caso 2: Con archivos => multipart/form-data
+     * Campo esperado en backend: "files"
+     *
+     * 📌 Importante:
+     * - En multipart, los campos llegan como string (por eso location va como JSON string).
+     */
+    const form = new FormData();
+
+    // ✅ Texto es opcional (puede ser adjuntos-only)
+    form.append('text', safeText);
+
+    // ✅ Ubicación (si viene) como JSON string
+    if (input.location) {
+      form.append('location', JSON.stringify(input.location));
+    }
+
+    // ✅ Archivos/Imágenes
+    for (const att of input.attachments ?? []) {
+      form.append(
+        'files',
+        {
+          uri: att.uri,
+          name: att.name,
+          type: att.mimeType,
+        } as any,
+      );
+    }
+
+    /**
+     * ✅ IMPORTANTE:
+     * NO mandamos Content-Type manual en multipart.
+     * El boundary lo genera fetch automáticamente.
+     * (En el siguiente archivo ajustaremos el HttpClient para soportar FormData)
+     */
+    return this.http.request<SendMessageResult, any>(path, 'POST', form as any, {});
   }
 }

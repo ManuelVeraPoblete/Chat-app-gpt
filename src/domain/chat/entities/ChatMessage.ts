@@ -8,34 +8,62 @@
 export type ChatRole = 'user' | 'assistant';
 
 /**
- * ✅ Tipo de adjunto persistido (viene desde el backend)
+ * ✅ Tipos de adjunto persistido (viene desde el backend)
+ * - IMAGE / FILE => archivos reales
+ * - LOCATION => ubicación compartida (tipo WhatsApp)
  */
-export type ChatAttachmentKind = 'IMAGE' | 'FILE';
+export type ChatAttachmentKind = 'IMAGE' | 'FILE' | 'LOCATION';
 
 /**
  * ✅ Attachment persistido en BD (backend -> frontend)
- * url: será relativo (ej: /uploads/chat/xxx.jpg) o absoluto según backend
+ *
+ * Para cumplir Clean Code:
+ * - Usamos unión discriminada por `kind`
+ * - Evitamos campos "que no aplican" según el tipo
  */
-export type ChatAttachment = {
+
+/** ✅ Archivos: imágenes o documentos */
+export type ChatFileAttachment = {
   id: string;
-  kind: ChatAttachmentKind;
+  kind: 'IMAGE' | 'FILE';
+
+  /**
+   * ✅ URL pública del archivo
+   * - relativo (ej: /uploads/chat/xxx.jpg)
+   * - o absoluto si backend lo entrega así
+   */
   url: string;
 
   fileName: string;
   mimeType: string;
   fileSize: number;
 
-  // ✅ opcional: por si a futuro el backend agrega metadata de imagen
+  // ✅ opcional: metadata de imagen si existe
   width?: number | null;
   height?: number | null;
 };
 
+/** ✅ Ubicación compartida */
+export type ChatLocationAttachment = {
+  id: string;
+  kind: 'LOCATION';
+
+  latitude: number;
+  longitude: number;
+
+  /**
+   * ✅ etiqueta opcional (ej: "Oficina", "Casa")
+   */
+  label?: string | null;
+};
+
+/**
+ * ✅ Unión discriminada
+ */
+export type ChatAttachment = ChatFileAttachment | ChatLocationAttachment;
+
 /**
  * ✅ Mensaje del chat (backend -> frontend)
- *
- * attachments:
- * - puede venir vacío o no venir dependiendo del backend (por eso ?)
- * - cuando no hay archivos, el backend manda [] pero lo soportamos igual
  */
 export type ChatMessage = {
   id: string;
@@ -74,11 +102,10 @@ export type SendMessageResult = {
 
 /**
  * =============================================================================
- * ✅ Tipos para ENVÍO de archivos (frontend -> backend)
+ * ✅ Tipos para ENVÍO (frontend -> backend)
  * =============================================================================
- *
- * Estos tipos NO dependen de Express/Multer.
- * (Cumple Clean Architecture: el dominio no conoce infraestructura)
+ * Clean Architecture:
+ * - El dominio NO conoce Express/Multer.
  */
 
 /**
@@ -112,13 +139,30 @@ export type OutgoingAttachment = {
 };
 
 /**
+ * ✅ Ubicación saliente (WhatsApp-like)
+ * No es un "archivo", pero es un adjunto de negocio.
+ */
+export type OutgoingLocation = {
+  latitude: number;
+  longitude: number;
+  label?: string;
+};
+
+/**
  * ✅ Payload de envío de mensaje
  * Permite:
  * - solo texto
- * - solo adjuntos
+ * - solo adjuntos (archivos)
  * - texto + adjuntos
+ * - ✅ ubicación como adjunto tipado (LOCATION)
  */
 export type SendChatMessagePayload = {
   text?: string;
   attachments?: OutgoingAttachment[];
+
+  /**
+   * ✅ NUEVO: Ubicación como adjunto de negocio
+   * (Luego backend lo persistirá como attachment kind=LOCATION)
+   */
+  location?: OutgoingLocation;
 };

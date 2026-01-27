@@ -17,10 +17,10 @@ export type HttpClient = {
 };
 
 /**
- * ✅ Cliente HTTP base sobre fetch
- * - Soporta JSON (default)
- * - Soporta FormData (uploads de archivos)
- * - Manejo consistente de errores (HttpError)
+ * Cliente HTTP base sobre fetch:
+ * ✅ Tipado genérico
+ * ✅ Manejo consistente de errores
+ * ✅ Soporta JSON y FormData (multipart)
  */
 export function createHttpClient(baseUrl: string = ENV.API_BASE_URL): HttpClient {
   // ✅ Normalizamos baseUrl por seguridad (sin slash final)
@@ -35,21 +35,38 @@ export function createHttpClient(baseUrl: string = ENV.API_BASE_URL): HttpClient
     ): Promise<TResponse> {
       const url = buildUrl(normalizedBaseUrl, path);
 
-      // ✅ Detecta si estamos enviando archivos (multipart)
-      const isForm = isFormData(body);
+      /**
+       * ✅ Detectar si body es FormData (para uploads tipo WhatsApp)
+       * - En ese caso NO seteamos Content-Type manualmente.
+       * - fetch lo manejará con boundary correcto.
+       */
+      const isMultipart = isFormData(body);
 
-      // ✅ Si es FormData NO se debe setear Content-Type manualmente.
-      // Fetch agrega el boundary automáticamente.
+      /**
+       * ✅ Construimos headers finales
+       * - Siempre aceptamos JSON
+       * - Solo ponemos Content-Type JSON cuando corresponde
+       */
       const finalHeaders: Record<string, string> = {
-        ...(isForm ? {} : { 'Content-Type': 'application/json' }),
+        Accept: 'application/json',
         ...headers,
       };
 
-      const finalBody =
-        body === undefined ? undefined : isForm ? (body as any) : JSON.stringify(body);
+      if (!isMultipart && body !== undefined && !finalHeaders['Content-Type']) {
+        // ✅ Solo si NO es FormData y hay body => Content-Type JSON
+        finalHeaders['Content-Type'] = 'application/json';
+      }
+
+      /**
+       * ✅ Construimos body final:
+       * - GET/DELETE normalmente NO envían body
+       * - FormData se envía tal cual
+       * - string se envía directo
+       * - JSON se serializa
+       */
+      const finalBody = buildRequestBody(method, body, isMultipart);
 
       let res: Response;
-
       try {
         res = await fetch(url, {
           method,
@@ -70,10 +87,14 @@ export function createHttpClient(baseUrl: string = ENV.API_BASE_URL): HttpClient
         );
       }
 
+      // ✅ 204 No Content
+      if (res.status === 204) {
+        return undefined as unknown as TResponse;
+      }
+
       const text = await res.text();
       const payload = text ? safeJsonParse(text) : undefined;
 
-      // ✅ Si no es OK, convertimos a HttpError tipado
       if (!res.ok) {
         const message =
           (payload as any)?.message ||
@@ -91,7 +112,39 @@ export function createHttpClient(baseUrl: string = ENV.API_BASE_URL): HttpClient
 }
 
 /**
- * ✅ Helpers
+ * ✅ Construye body final según:
+ * - método
+ * - tipo de body (FormData / string / JSON)
+ */
+function buildRequestBody<TBody>(
+  method: HttpMethod,
+  body?: TBody,
+  isMultipart?: boolean
+): BodyInit | undefined {
+  // ✅ Por seguridad, no mandamos body en GET
+  if (method === 'GET') return undefined;
+
+  if (body === undefined) return undefined;
+
+  // ✅ FormData: se envía tal cual
+  if (isMultipart) return body as unknown as BodyInit;
+
+  // ✅ Si body ya es string, lo mandamos tal cual
+  if (typeof body === 'string') return body;
+
+  // ✅ JSON (objeto)
+  return JSON.stringify(body);
+}
+
+/**
+ * ✅ Detecta FormData de manera segura en RN/Expo
+ */
+function isFormData(value: unknown): value is FormData {
+  return typeof FormData !== 'undefined' && value instanceof FormData;
+}
+
+/**
+ * ✅ Asegura que baseUrl no termine en slash.
  */
 function normalizeBaseUrl(url: string): string {
   return url.replace(/\/$/, '');
@@ -111,14 +164,4 @@ function safeJsonParse(text: string) {
   } catch {
     return text;
   }
-}
-
-/**
- * ✅ Detecta FormData de forma segura (sin romper entornos donde no exista FormData)
- */
-function isFormData(body: unknown): boolean {
-  // @ts-ignore
-  if (typeof FormData === 'undefined') return false;
-  // @ts-ignore
-  return body instanceof FormData;
 }

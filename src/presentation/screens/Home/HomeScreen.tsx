@@ -1,7 +1,7 @@
 // src/presentation/screens/Home/HomeScreen.tsx
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, RefreshControl,  View } from 'react-native';
+import { Alert, FlatList, RefreshControl, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useNavigation } from '@react-navigation/native';
@@ -19,8 +19,6 @@ import { ChatListItem, type ChatRow } from './components/ChatListItem';
 
 import { Routes } from '../../navigation/routes';
 import type { RootStackParamList } from '../../navigation/AppNavigator';
-import type { UserListItem } from '../../../types/user.types';
-
 
 /**
  * ✅ Regla de negocio solicitada:
@@ -63,7 +61,6 @@ export function HomeScreen() {
 
     try {
       const users = await getUsersUseCase.execute();
-
       const myId = session?.user?.id;
 
       /**
@@ -76,24 +73,24 @@ export function HomeScreen() {
        * ✅ Convertimos usuarios de BD a filas tipo chat
        */
       const mapped: ChatRow[] = filteredUsers.map((u) => {
-  // ✅ Subtítulo corporativo: Sección • Cargo, si no existe, muestra teléfono.
-  const subtitle =
-    [u.companySection, u.jobTitle].filter(Boolean).join(' • ') ||
-    u.phone ||
-    'Sin información';
+        // ✅ Subtítulo corporativo: Sección • Cargo, si no existe, muestra teléfono.
+        const subtitle =
+          [u.companySection, u.jobTitle].filter(Boolean).join(' • ') ||
+          u.phone ||
+          'Sin información';
 
-  return {
-    id: u.id,
-    email: u.email,
-    displayName: u.displayName,
-    avatarUrl: u.avatarUrl ?? null,
+        return {
+          id: u.id,
+          email: u.email,
+          displayName: u.displayName,
+          avatarUrl: u.avatarUrl ?? null,
 
-    // ✅ Esta línea ya no será "Escribele un mensaje..."
-    lastMessage: subtitle,
+          // ✅ Esta línea ya no será "Escribele un mensaje..."
+          lastMessage: subtitle,
 
-    lastMessageAt: new Date(),
-  };
-});
+          lastMessageAt: new Date(),
+        };
+      });
 
       /**
        * ✅ Ordenar:
@@ -101,7 +98,6 @@ export function HomeScreen() {
        * 2) resto alfabético por displayName
        */
       const sorted = mapped.sort((a, b) => sortChatRows(a, b));
-
       setRows(sorted);
     } catch (e: any) {
       Alert.alert('Error', e?.message ?? 'No se pudieron cargar los usuarios desde la BD');
@@ -139,14 +135,20 @@ export function HomeScreen() {
         email: user.email,
       });
     },
-    [navigation]
+    [navigation],
   );
+
+  /**
+   * ✅ NUEVO: Abrir mapa de conectados
+   */
+  const handleOpenLocations = useCallback(() => {
+    navigation.navigate(Routes.Locations);
+  }, [navigation]);
 
   /**
    * ✅ Logout seguro:
    * - Confirmación
    * - Limpia sesión/tokens
-   * - AppNavigator detecta session=null y vuelve a Login automáticamente
    */
   const handleLogout = useCallback(() => {
     Alert.alert('Cerrar sesión', '¿Quieres cerrar sesión y entrar con otro usuario?', [
@@ -168,7 +170,8 @@ export function HomeScreen() {
           currentUserName="CorpChat"
           query={query}
           onChangeQuery={setQuery}
-          onPressLogout={handleLogout} // ✅ BOTÓN LOGOUT
+          onPressLocations={handleOpenLocations} // ✅ NUEVO BOTÓN MAPA
+          onPressLogout={handleLogout} // ✅ LOGOUT
         />
 
         <FlatList

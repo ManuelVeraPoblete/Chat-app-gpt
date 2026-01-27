@@ -8,19 +8,26 @@ type Props = {
   query: string;
   onChangeQuery: (text: string) => void;
 
-  /**
-   * ✅ Solo dejamos Logout
-   */
+  // ✅ NUEVO: abrir mapa de conectados
+  onPressLocations: () => void;
+
+  // ✅ Logout
   onPressLogout: () => void;
 };
 
 /**
  * HomeHeader
- * - Header tipo WhatsApp corporativo
- * - ✅ Más delgado
- * - ✅ Solo icono Logout
+ * - Header corporativo
+ * - ✅ Buscador
+ * - ✅ Mapa + Logout
  */
-export function HomeHeader({ currentUserName, query, onChangeQuery, onPressLogout }: Props) {
+export function HomeHeader({
+  currentUserName,
+  query,
+  onChangeQuery,
+  onPressLocations,
+  onPressLogout,
+}: Props) {
   const initial = (currentUserName?.trim()?.[0] ?? 'C').toUpperCase();
 
   return (
@@ -47,8 +54,13 @@ export function HomeHeader({ currentUserName, query, onChangeQuery, onPressLogou
         />
       </View>
 
-      {/* ✅ SOLO LOGOUT */}
-      <Pressable style={styles.iconBtn} onPress={onPressLogout}>
+      {/* ✅ MAPA */}
+      <Pressable style={styles.iconBtn} onPress={onPressLocations} hitSlop={10}>
+        <Ionicons name="map-outline" size={22} color="#FFFFFF" />
+      </Pressable>
+
+      {/* ✅ LOGOUT */}
+      <Pressable style={styles.iconBtn} onPress={onPressLogout} hitSlop={10}>
         <Ionicons name="log-out-outline" size={22} color="#FFFFFF" />
       </Pressable>
     </View>
