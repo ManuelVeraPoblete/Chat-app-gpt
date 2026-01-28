@@ -1,13 +1,8 @@
+// src/presentation/screens/Chat/ChatScreen.styles.ts
 import { StyleSheet } from 'react-native';
 
 /**
  * ✅ Estilos ChatScreen (WhatsApp-like PRO)
- * Incluye:
- * ✅ Fondo con patrón
- * ✅ Burbujas + colita
- * ✅ Input absoluto + teclado
- * ✅ Botones Adjuntar + Ubicación
- * ✅ Modal preview de imágenes
  */
 export const styles = StyleSheet.create({
   safe: {
@@ -15,7 +10,6 @@ export const styles = StyleSheet.create({
     backgroundColor: '#d9ecff',
   },
 
-  // ✅ Header
   header: {
     backgroundColor: '#2b69a6',
     paddingHorizontal: 10,
@@ -85,18 +79,16 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  // ✅ Body
   chatBody: {
     flex: 1,
     backgroundColor: '#d9ecff',
-    position: 'relative', // ✅ requerido para input absoluto
+    position: 'relative',
   },
 
   container: {
     flex: 1,
   },
 
-  // ✅ Patrón
   patternLayer: {
     ...StyleSheet.absoluteFillObject,
     flexDirection: 'row',
@@ -112,13 +104,11 @@ export const styles = StyleSheet.create({
     backgroundColor: '#f6f7f9',
   },
 
-  // ✅ Lista (inverted)
   listContent: {
     paddingHorizontal: 12,
     paddingBottom: 14,
   },
 
-  // ✅ Mensajes
   messageRow: {
     width: '100%',
     marginVertical: 6,
@@ -199,7 +189,6 @@ export const styles = StyleSheet.create({
     marginLeft: 2,
   },
 
-  // ✅ Colitas
   tailBaseLeft: {
     position: 'absolute',
     left: -6,
@@ -242,7 +231,6 @@ export const styles = StyleSheet.create({
     borderRadius: 6,
   },
 
-  // ✅ Input absoluto (se mueve con teclado)
   inputBar: {
     position: 'absolute',
     left: 0,
@@ -254,31 +242,12 @@ export const styles = StyleSheet.create({
     borderTopColor: 'rgba(0,0,0,0.06)',
   },
 
-  /**
-   * ✅ Texto contador adjuntos (ej: 2/10)
-   */
-  attachCounterText: {
-    marginTop: 6,
-    marginBottom: 6,
-    color: '#0b2b52',
-    fontSize: 12,
-    fontWeight: '800',
-    alignSelf: 'flex-end',
-  },
-
-  /**
-   * ✅ Fila principal del composer: botones + input + send
-   */
   composerRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingBottom: 8,
   },
 
-  /**
-   * ✅ Botón de acciones (📎 / 📍)
-   * estilo profesional
-   */
   attachBtn: {
     width: 44,
     height: 44,
@@ -318,9 +287,6 @@ export const styles = StyleSheet.create({
     opacity: 0.5,
   },
 
-  /**
-   * ✅ Modal preview imagen (FULLSCREEN)
-   */
   imagePreviewOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.92)',
@@ -344,5 +310,151 @@ export const styles = StyleSheet.create({
     width: '92%',
     height: '78%',
     borderRadius: 12,
+  },
+
+  /**
+   * =============================================================================
+   * ✅ Adjuntos - Preview (antes de enviar)
+   * =============================================================================
+   */
+  attachPreviewContainer: {
+    backgroundColor: 'rgba(255,255,255,0.75)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    borderRadius: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    marginBottom: 10,
+  },
+
+  attachPreviewScroll: {
+    paddingRight: 6,
+    gap: 10,
+    alignItems: 'center',
+  },
+
+  attachPreviewItem: {
+    width: 86,
+    height: 64,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    justifyContent: 'center',
+  },
+
+  attachPreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+
+  attachPreviewFile: {
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    justifyContent: 'center',
+    gap: 4,
+  },
+
+  attachPreviewFileName: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#0b2b52',
+  },
+
+  attachPreviewFileSize: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: 'rgba(11,43,82,0.60)',
+  },
+
+  attachRemoveBtn: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(43,105,166,0.95)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  /**
+   * =============================================================================
+   * ✅ Adjuntos - Render dentro del mensaje
+   * =============================================================================
+   */
+  msgAttachmentsWrap: {
+    marginBottom: 8,
+    gap: 10,
+  },
+
+  msgImagesRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+
+  msgImagePress: {
+    width: 84,
+    height: 84,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+  },
+
+  msgImageThumb: {
+    width: '100%',
+    height: '100%',
+  },
+
+  msgImageMoreOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  msgImageMoreText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+
+  msgFilesCol: {
+    gap: 8,
+  },
+
+  msgFileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.78)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+  },
+
+  msgFileMeta: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  msgFileName: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#0b2b52',
+  },
+
+  msgFileSize: {
+    marginTop: 2,
+    fontSize: 11,
+    fontWeight: '800',
+    color: 'rgba(11,43,82,0.60)',
   },
 });

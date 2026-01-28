@@ -1,3 +1,4 @@
+// src/presentation/navigation/AppNavigator.tsx
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
@@ -32,11 +33,12 @@ export type RootStackParamList = {
 
   /**
    * ✅ Perfil del usuario con el que estás chateando
+   * ⚠️ NO pasamos tokens por navegación (seguridad + evita bugs).
    */
   [Routes.UserProfile]: {
     userId: string;
-    accessToken: string;
     displayName?: string;
+    email?: string;
   };
 
   /**

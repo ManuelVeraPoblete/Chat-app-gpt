@@ -1,3 +1,4 @@
+// src/presentation/screens/Chat/ChatScreen.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -20,7 +21,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import * as Location from 'expo-location';
 
 import { styles } from './ChatScreen.styles';
 import { Routes } from '../../navigation/routes';
@@ -50,7 +50,7 @@ import { AttachmentPreviewBar } from './components/AttachmentPreviewBar';
 import { MessageAttachments, type UiAttachment } from './components/MessageAttachments';
 import { AttachSheet } from './components/AttachSheet';
 
-// ✅ Tarjeta de ubicación WhatsApp-like (con mini mapa)
+// ✅ Tarjeta de ubicación WhatsApp-like (se mantiene para mostrar mensajes antiguos si existen)
 import { LocationMessageCard } from './components/LocationMessageCard';
 
 /**
@@ -68,7 +68,7 @@ type UiChatMessage = {
   from: 'me' | 'other';
   status?: SendStatus;
   attachments?: UiAttachment[];
-  location?: OutgoingLocation; // ✅ NUEVO: ubicación en UI
+  location?: OutgoingLocation; // ✅ Se mantiene por compatibilidad (mostrar ubicaciones si llegan)
 };
 
 /**
@@ -431,10 +431,6 @@ export function ChatScreen() {
     setPendingAttachments((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
-  const openAttachMenu = useCallback(() => {
-    setIsAttachSheetOpen(true);
-  }, []);
-
   const pickImagesFromGallery = useCallback(async () => {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -511,42 +507,6 @@ export function ChatScreen() {
   }, [addPendingAttachments]);
 
   /**
-   * ✅ NUEVO: compartir ubicación como adjunto LOCATION real
-   */
-  const shareCurrentLocation = useCallback(async () => {
-    try {
-      if (!peerId) return;
-      if (isSending) return;
-
-      const perm = await Location.requestForegroundPermissionsAsync();
-      if (perm.status !== 'granted') {
-        Alert.alert('Permiso requerido', 'Debes permitir ubicación para compartirla.');
-        return;
-      }
-
-      const pos = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      const locationPayload: OutgoingLocation = {
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
-      };
-
-      // ✅ Envío PRO: location como attachment real
-      await sendWithOptimistic({
-        text: '📍 Ubicación compartida',
-        attachments: [],
-        location: locationPayload,
-      });
-
-      if (isAtBottomRef.current) scrollToBottom(false);
-    } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'No se pudo obtener tu ubicación');
-    }
-  }, [isSending, peerId, scrollToBottom, sendWithOptimistic]);
-
-  /**
    * ✅ Enviar mensaje (texto + adjuntos)
    */
   const handleSend = useCallback(async () => {
@@ -582,7 +542,7 @@ export function ChatScreen() {
   }, []);
 
   /**
-   * ✅ Render mensaje (con tarjeta de ubicación)
+   * ✅ Render mensaje (con tarjeta de ubicación si existe)
    */
   const renderItem = useCallback(
     ({ item }: { item: UiChatMessage }) => {
@@ -607,7 +567,7 @@ export function ChatScreen() {
                 </>
               )}
 
-              {/* ✅ Ubicación como tarjeta PRO */}
+              {/* ✅ Ubicación como tarjeta (si llega desde backend) */}
               {item.location && <LocationMessageCard location={item.location} />}
 
               {/* ✅ Adjuntos */}
@@ -744,15 +704,7 @@ export function ChatScreen() {
                 <Ionicons name="attach" size={18} color="#0b2b52" />
               </Pressable>
 
-              {/* 📍 Ubicación PRO */}
-              <Pressable
-                onPress={shareCurrentLocation}
-                disabled={isSending}
-                style={[styles.attachBtn, isSending && styles.sendBtnDisabled]}
-                hitSlop={10}
-              >
-                <Ionicons name="location-outline" size={18} color="#0b2b52" />
-              </Pressable>
+              {/* ✅ Ubicación ELIMINADA (no se usa) */}
 
               <TextInput
                 value={text}
@@ -825,24 +777,27 @@ function uniqueByIdPreferDelivered(list: UiChatMessage[]): UiChatMessage[] {
 }
 
 function mergeStatus(a: UiChatMessage, b: UiChatMessage): UiChatMessage {
-  if (a.from !== 'me' && b.from !== 'me') return a;
-
-  const rank = (s?: SendStatus) => (s === 'delivered' ? 2 : s === 'sending' ? 1 : 0);
-  const best = rank(b.status) > rank(a.status) ? b : a;
+  // ✅ Preferimos delivered sobre sending
+  const status =
+    a.status === 'delivered' || b.status === 'delivered'
+      ? 'delivered'
+      : a.status === 'sending' || b.status === 'sending'
+        ? 'sending'
+        : undefined;
 
   return {
     ...a,
     ...b,
-    status: best.status,
+    status,
   };
 }
 
 function sortNewestFirst(list: UiChatMessage[]): UiChatMessage[] {
-  return [...list].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  return [...list].sort((x, y) => y.createdAt.getTime() - x.createdAt.getTime());
 }
 
 function formatTime(date: Date): string {
-  const h = String(date.getHours()).padStart(2, '0');
-  const m = String(date.getMinutes()).padStart(2, '0');
+  const h = date.getHours().toString().padStart(2, '0');
+  const m = date.getMinutes().toString().padStart(2, '0');
   return `${h}:${m}`;
 }

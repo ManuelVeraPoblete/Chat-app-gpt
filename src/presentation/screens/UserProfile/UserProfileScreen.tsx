@@ -1,43 +1,53 @@
-import React, { useEffect, useState } from 'react';
+// src/presentation/screens/UserProfile/UserProfileScreen.tsx
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { useRoute } from '@react-navigation/native';
+import type { RouteProp } from '@react-navigation/native';
+
 import { styles } from './UserProfileScreen.styles';
-import { getApiBaseUrl } from '../../../shared/config/apiBaseUrl';
+import { Routes } from '../../navigation/routes';
+import type { RootStackParamList } from '../../navigation/AppNavigator';
+
+import { useApi } from '../../../state/api/ApiContext';
+import { useAuth } from '../../../state/auth/AuthContext';
+
+import { UsersRepositoryHttp } from '../../../data/users/UsersRepositoryHttp';
+import { GetUserProfileUseCase } from '../../../domain/users/usecases/GetUserProfileUseCase';
+import type { UserProfile } from '../../../domain/users/entities/UserProfile';
 
 /**
- * ✅ Modelo público del usuario (lo que devuelve GET /users/:id)
+ * ✅ Tipos de navegación (evita any)
  */
-type PublicUser = {
-  id: string;
-  email: string;
-  displayName: string;
-
-  phone?: string | null;
-  companySection?: string | null;
-  jobTitle?: string | null;
-
-  createdAt?: string;
-};
+type UserProfileRoute = RouteProp<RootStackParamList, typeof Routes.UserProfile>;
 
 /**
  * ✅ UserProfileScreen
  * - Muestra datos del usuario con quien estás chateando
  * - Backend: GET /users/:id (JWT)
+ *
+ * Importante:
+ * - NO pasamos el token por navegación (seguridad + evita bugs).
+ * - Usamos ApiContext (AuthorizedHttpClient) que agrega JWT + refresh automático.
  */
 export default function UserProfileScreen() {
-  const route = useRoute<any>();
+  const route = useRoute<UserProfileRoute>();
 
-  const userId: string = route?.params?.userId;
-  const accessToken: string = route?.params?.accessToken;
+  const { http } = useApi();
+  const { session } = useAuth();
+
+  const userId = route.params?.userId;
 
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<PublicUser | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * ✅ URL base automática (Android emulator / iOS simulator / físico)
+   * ✅ UseCase (arquitectura limpia)
    */
-  const API_BASE_URL = getApiBaseUrl();
+  const getUserProfileUseCase = useMemo(() => {
+    const repo = new UsersRepositoryHttp(http);
+    return new GetUserProfileUseCase(repo);
+  }, [http]);
 
   useEffect(() => {
     let mounted = true;
@@ -47,23 +57,14 @@ export default function UserProfileScreen() {
         setLoading(true);
         setError(null);
 
+        // ✅ Validaciones mínimas
         if (!userId) throw new Error('userId no fue enviado a la pantalla de perfil');
-        if (!accessToken) throw new Error('Token inválido o sesión expirada');
 
-        const res = await fetch(`${API_BASE_URL}/users/${userId}`, {
-          method: 'GET',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-        });
+        // Si no hay sesión, el AuthorizedHttpClient no pondrá Authorization.
+        // Esto suele ocurrir si expiró y el refresh falló => logout.
+        if (!session?.accessToken) throw new Error('Token inválido o sesión expirada');
 
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`Error al obtener perfil: ${res.status} - ${errText}`);
-        }
-
-        const data: PublicUser = await res.json();
+        const data = await getUserProfileUseCase.execute(userId);
 
         if (mounted) setUser(data);
       } catch (e: any) {
@@ -78,7 +79,7 @@ export default function UserProfileScreen() {
     return () => {
       mounted = false;
     };
-  }, [API_BASE_URL, accessToken, userId]);
+  }, [getUserProfileUseCase, session?.accessToken, userId]);
 
   // ✅ Loading
   if (loading) {
@@ -135,6 +136,14 @@ export default function UserProfileScreen() {
           <Text style={styles.label}>Cargo</Text>
           <Text style={styles.value}>{user.jobTitle ?? 'No informado'}</Text>
         </View>
+
+        {/* ✅ Opcionales */}
+        {'status' in user ? (
+          <View style={styles.row}>
+            <Text style={styles.label}>Estado</Text>
+            <Text style={styles.value}>{user.status ?? 'No informado'}</Text>
+          </View>
+        ) : null}
       </View>
     </ScrollView>
   );
