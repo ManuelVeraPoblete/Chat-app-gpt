@@ -1,9 +1,10 @@
+// src/presentation/screens/Locations/LocationsScreen.styles.ts
+
 import { StyleSheet } from 'react-native';
 
 /**
  * ✅ Estilos profesionales para LocationsScreen
- * - Diseño corporativo consistente con el resto del proyecto
- * - Estructura clara y mantenible
+ * - Marcadores: avatar circular o iniciales (fallback tipo chat)
  */
 export const styles = StyleSheet.create({
   safe: {
@@ -78,122 +79,64 @@ export const styles = StyleSheet.create({
     fontSize: 12,
   },
 
-  controls: {
-    padding: 12,
-    backgroundColor: '#cfe6ff',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.06)',
-    gap: 12,
-  },
-
-  liveRow: {
-    flexDirection: 'row',
+  /**
+   * ✅ Marker: avatar
+   * - Contenedor circular con sombra
+   */
+  markerAvatarWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.96)',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'center',
+    overflow: 'hidden',
+
+    // iOS shadow
+    shadowColor: '#0b2b52',
+    shadowOpacity: 0.20,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 3 },
+
+    // Android shadow
+    elevation: 5,
+
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.75)',
   },
 
-  liveLabel: {
-    color: '#0b2b52',
-    fontWeight: '900',
-    fontSize: 12,
+  markerAvatarImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    resizeMode: 'cover',
   },
 
-  liveChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 14,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
+  /**
+   * ✅ Marker: iniciales (fallback tipo chat)
+   */
+  markerInitialsWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(43,105,166,0.95)', // corporativo azul
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    shadowColor: '#0b2b52',
+    shadowOpacity: 0.20,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.75)',
   },
 
-  liveChipActive: {
-    backgroundColor: '#2b69a6',
-  },
-
-  liveChipText: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#0b2b52',
-  },
-
-  liveChipTextActive: {
+  markerInitialsText: {
     color: '#fff',
-  },
-
-  actionsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-
-  primaryBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: '#2b69a6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-
-  primaryBtnText: {
-    color: '#fff',
+    fontSize: 14,
     fontWeight: '900',
-    fontSize: 13,
-  },
-
-  secondaryBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-
-  secondaryBtnText: {
-    color: '#0b2b52',
-    fontWeight: '900',
-    fontSize: 13,
-  },
-
-  dangerBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: '#c0392b',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-
-  dangerBtnText: {
-    color: '#fff',
-    fontWeight: '900',
-    fontSize: 13,
-  },
-
-  permBtn: {
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-
-  permBtnText: {
-    color: '#0b2b52',
-    fontWeight: '900',
-    fontSize: 13,
+    letterSpacing: 0.5,
   },
 });

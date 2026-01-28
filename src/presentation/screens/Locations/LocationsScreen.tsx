@@ -1,5 +1,7 @@
+// src/presentation/screens/Locations/LocationsScreen.tsx
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Platform, Pressable, Text, View } from 'react-native';
+import { Alert, Image, Platform, Pressable, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,18 +16,26 @@ import { GetUsersUseCase } from '../../../domain/users/usecases/GetUsersUseCase'
 
 import { LocationsRepositoryHttp } from '../../../domain/locations/LocationsRepositoryHttp';
 import { GetActiveLocationsUseCase } from '../../../domain/locations/usecases/GetActiveLocationsUseCase';
-import { UpdateMyLocationUseCase } from '../../../domain/locations/usecases/UpdateMyLocationUseCase';
-import { StopSharingLocationUseCase } from '../../../domain/locations/usecases/StopSharingLocationUseCase';
 
 import type { ActiveUserLocation } from '../../../domain/locations/entities/UserLocation';
 import { useFocusPolling } from '../../../shared/hooks/useFocusPolling';
 
 import { styles as s } from './LocationsScreen.styles';
 
+type UserMini = {
+  displayName: string;
+  avatarUrl?: string | null;
+};
+
 /**
  * ✅ LocationsScreen
- * - Mapa con usuarios conectados (ubicación reciente)
- * - Compartir mi ubicación puntual o en vivo (tipo WhatsApp)
+ * - Muestra la ubicación de todos los usuarios activos en el mapa (API).
+ * - Muestra MI ubicación local (GPS) aunque yo no esté compartiendo.
+ * - Marcadores:
+ *    - Foto de perfil si existe
+ *    - Si no existe: círculo con iniciales (como en chat)
+ *
+ * Nota: Footer de compartir ubicación fue removido.
  */
 export function LocationsScreen() {
   const navigation = useNavigation();
@@ -46,41 +56,59 @@ export function LocationsScreen() {
 
   const locationsRepo = useMemo(() => new LocationsRepositoryHttp(http), [http]);
   const getActiveUseCase = useMemo(() => new GetActiveLocationsUseCase(locationsRepo), [locationsRepo]);
-  const updateMyLocationUseCase = useMemo(() => new UpdateMyLocationUseCase(locationsRepo), [locationsRepo]);
-  const stopSharingUseCase = useMemo(() => new StopSharingLocationUseCase(locationsRepo), [locationsRepo]);
 
   /**
    * ✅ UI state
    */
-  const mapRef = useRef<MapView | null>(null); // ✅ Correcto para ref
+  const mapRef = useRef<MapView | null>(null);
   const [region, setRegion] = useState<Region | null>(null);
 
   const [activeLocations, setActiveLocations] = useState<ActiveUserLocation[]>([]);
-  const [usersById, setUsersById] = useState<Record<string, { displayName: string }>>({});
+  const [usersById, setUsersById] = useState<Record<string, UserMini>>({});
 
   const [hasLocationPerm, setHasLocationPerm] = useState<boolean>(false);
-  const [isLiveSharing, setIsLiveSharing] = useState(false);
-  const [liveMinutes, setLiveMinutes] = useState<15 | 60 | 480>(15);
-  const liveUntilTsRef = useRef<number | null>(null);
+  const [myCoords, setMyCoords] = useState<{ latitude: number; longitude: number } | null>(null);
 
   /**
-   * ✅ Carga usuarios para mostrar nombres en los markers
+   * ✅ Helpers: iniciales tipo chat
+   */
+  const buildInitials = useCallback((name: string) => {
+    const clean = (name ?? '').trim().replace(/\s+/g, ' ');
+    if (!clean) return '?';
+
+    const parts = clean.split(' ').filter(Boolean);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+
+    const first = parts[0]?.[0] ?? '';
+    const last = parts[parts.length - 1]?.[0] ?? '';
+    return `${first}${last}`.toUpperCase();
+  }, []);
+
+  /**
+   * ✅ Carga usuarios para mostrar nombre/avatar en los markers
    */
   useEffect(() => {
     (async () => {
       try {
         const users = await usersUseCase.execute();
-        const map: Record<string, { displayName: string }> = {};
-        for (const u of users) map[u.id] = { displayName: u.displayName };
+
+        const map: Record<string, UserMini> = {};
+        for (const u of users) {
+          map[u.id] = {
+            displayName: u.displayName,
+            // ✅ Si existe en tu entidad AppUser (según tu historial), lo guardamos
+            avatarUrl: (u as any).avatarUrl ?? null,
+          };
+        }
         setUsersById(map);
       } catch {
-        // No bloqueamos la pantalla si falla, solo se verá el userId.
+        // No bloqueamos UX si falla. Se verá un fallback con iniciales/id corto.
       }
     })();
   }, [usersUseCase]);
 
   /**
-   * ✅ Permisos de ubicación
+   * ✅ Permisos de ubicación (foreground)
    */
   const ensureLocationPermission = useCallback(async (): Promise<boolean> => {
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -88,17 +116,14 @@ export function LocationsScreen() {
     setHasLocationPerm(granted);
 
     if (!granted) {
-      Alert.alert(
-        'Permiso requerido',
-        'Debes permitir ubicación para compartirla o centrar el mapa en tu posición.',
-      );
+      Alert.alert('Permiso requerido', 'Debes permitir ubicación para centrar el mapa en tu posición.');
       return false;
     }
     return true;
   }, []);
 
   /**
-   * ✅ Obtener coordenadas actuales (modo eficiente)
+   * ✅ Obtener coordenadas actuales
    */
   const getCurrentCoords = useCallback(async () => {
     const ok = await ensureLocationPermission();
@@ -111,17 +136,18 @@ export function LocationsScreen() {
     return {
       latitude: pos.coords.latitude,
       longitude: pos.coords.longitude,
-      accuracy: pos.coords.accuracy ?? undefined,
     };
   }, [ensureLocationPermission]);
 
   /**
-   * ✅ Centrar mapa al abrir
+   * ✅ Centrar mapa al abrir (si hay permisos)
    */
   useEffect(() => {
     (async () => {
       const coords = await getCurrentCoords();
       if (!coords) return;
+
+      setMyCoords(coords);
 
       const initial: Region = {
         latitude: coords.latitude,
@@ -131,20 +157,40 @@ export function LocationsScreen() {
       };
 
       setRegion(initial);
-
-      requestAnimationFrame(() => {
-        mapRef.current?.animateToRegion(initial, 450);
-      });
+      requestAnimationFrame(() => mapRef.current?.animateToRegion(initial, 450));
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /**
-   * ✅ Polling de usuarios conectados
+   * ✅ Mantener MI ubicación actualizada (solo para mostrar en el mapa)
    */
-  const fetchActive = useCallback(async () => {
-    return getActiveUseCase.execute(120);
-  }, [getActiveUseCase]);
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    let cancelled = false;
+
+    const tick = async () => {
+      if (cancelled) return;
+      if (!hasLocationPerm) return;
+
+      const coords = await getCurrentCoords();
+      if (!coords) return;
+
+      setMyCoords(coords);
+    };
+
+    timer = setInterval(() => void tick(), 5000);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+    };
+  }, [getCurrentCoords, hasLocationPerm]);
+
+  /**
+   * ✅ Polling de usuarios conectados (ubicación reciente)
+   */
+  const fetchActive = useCallback(async () => getActiveUseCase.execute(120), [getActiveUseCase]);
 
   useFocusPolling<ActiveUserLocation[]>({
     enabled: true,
@@ -153,6 +199,7 @@ export function LocationsScreen() {
     onData: (data) => {
       setActiveLocations(data);
 
+      // ✅ Fallback: si NO se pudo centrar por permisos, centra al primer activo.
       if (!region && data.length > 0) {
         const first = data[0];
         const initial: Region = {
@@ -168,120 +215,28 @@ export function LocationsScreen() {
   });
 
   /**
-   * ✅ Compartir ubicación puntual (1 vez)
-   */
-  const shareOnce = useCallback(async () => {
-    const coords = await getCurrentCoords();
-    if (!coords) return;
-
-    try {
-      await updateMyLocationUseCase.execute({
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        accuracy: coords.accuracy,
-        isLive: false,
-      });
-
-      Alert.alert('Ubicación enviada', 'Tu ubicación se compartió con usuarios conectados.');
-    } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'No se pudo compartir la ubicación');
-    }
-  }, [getCurrentCoords, updateMyLocationUseCase]);
-
-  /**
-   * ✅ Iniciar Live Location (tipo WhatsApp)
-   */
-  const startLiveSharing = useCallback(async () => {
-    const coords = await getCurrentCoords();
-    if (!coords) return;
-
-    try {
-      await updateMyLocationUseCase.execute({
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        accuracy: coords.accuracy,
-        isLive: true,
-        liveMinutes,
-      });
-
-      liveUntilTsRef.current = Date.now() + liveMinutes * 60_000;
-      setIsLiveSharing(true);
-    } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'No se pudo iniciar ubicación en vivo');
-    }
-  }, [getCurrentCoords, updateMyLocationUseCase, liveMinutes]);
-
-  /**
-   * ✅ Detener live sharing
-   */
-  const stopLiveSharing = useCallback(async () => {
-    try {
-      await stopSharingUseCase.execute();
-    } catch {
-      // No bloqueamos UX si falla, pero detenemos en UI igual.
-    } finally {
-      liveUntilTsRef.current = null;
-      setIsLiveSharing(false);
-    }
-  }, [stopSharingUseCase]);
-
-  /**
-   * ✅ Intervalo de actualización live (cada 5s)
-   */
-  useEffect(() => {
-    if (!isLiveSharing) return;
-
-    let timer: ReturnType<typeof setInterval> | null = null;
-    let cancelled = false;
-
-    const tick = async () => {
-      if (cancelled) return;
-
-      const until = liveUntilTsRef.current;
-      if (until && Date.now() >= until) {
-        await stopLiveSharing();
-        return;
-      }
-
-      const coords = await getCurrentCoords();
-      if (!coords) return;
-
-      try {
-        await updateMyLocationUseCase.execute({
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          accuracy: coords.accuracy,
-          isLive: true,
-          liveMinutes,
-        });
-      } catch {
-        // No spameamos alertas por problemas de red
-      }
-    };
-
-    void tick();
-    timer = setInterval(() => void tick(), 5000);
-
-    return () => {
-      cancelled = true;
-      if (timer) clearInterval(timer);
-    };
-  }, [getCurrentCoords, isLiveSharing, liveMinutes, stopLiveSharing, updateMyLocationUseCase]);
-
-  /**
    * ✅ Helpers UI
    */
-  const getUserLabel = useCallback(
+  const getDisplayName = useCallback(
     (userId: string) => {
-      if (userId === myUserId) return 'Tú';
+      if (userId === myUserId) return 'Tu';
       return usersById[userId]?.displayName ?? userId.slice(0, 8);
     },
     [myUserId, usersById],
   );
 
+  const getAvatarUrl = useCallback(
+    (userId: string) => {
+      return usersById[userId]?.avatarUrl ?? null;
+    },
+    [usersById],
+  );
+
   const centerOnMe = useCallback(async () => {
     const coords = await getCurrentCoords();
     if (!coords) return;
+
+    setMyCoords(coords);
 
     const next: Region = {
       latitude: coords.latitude,
@@ -293,6 +248,49 @@ export function LocationsScreen() {
     setRegion(next);
     requestAnimationFrame(() => mapRef.current?.animateToRegion(next, 450));
   }, [getCurrentCoords]);
+
+  /**
+   * ✅ Normalizamos markers:
+   * - Mi marker se toma desde GPS local (myCoords) si existe.
+   * - Los demás vienen desde activeLocations (excluyendo miUserId para no duplicar).
+   */
+  const otherLocations = useMemo(
+    () => activeLocations.filter((l) => l.userId !== myUserId),
+    [activeLocations, myUserId],
+  );
+
+  /**
+   * ✅ Render del avatar del marker:
+   * - Si hay avatarUrl => imagen
+   * - Si no => iniciales
+   */
+  const renderUserMarkerAvatar = useCallback(
+    (userId: string) => {
+      const name = getDisplayName(userId);
+      const avatarUrl = getAvatarUrl(userId);
+
+      // ✅ Si hay foto: se muestra la imagen
+      if (avatarUrl) {
+        return (
+          <View style={s.markerAvatarWrap}>
+            <Image source={{ uri: avatarUrl }} style={s.markerAvatarImg} />
+          </View>
+        );
+      }
+
+      // ✅ Si no hay foto: círculo con iniciales (como chat)
+      const initials = buildInitials(name);
+
+      return (
+        <View style={s.markerInitialsWrap}>
+          <Text style={s.markerInitialsText} numberOfLines={1}>
+            {initials}
+          </Text>
+        </View>
+      );
+    },
+    [buildInitials, getAvatarUrl, getDisplayName],
+  );
 
   return (
     <SafeAreaView style={[s.safe, { paddingTop: insets.top }]} edges={['top']}>
@@ -315,7 +313,7 @@ export function LocationsScreen() {
       {/* ✅ Map */}
       <View style={s.mapWrap}>
         <MapView
-          ref={mapRef} // ✅ FIX PROFESIONAL (ref object)
+          ref={mapRef}
           provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
           style={s.map}
           initialRegion={
@@ -328,77 +326,39 @@ export function LocationsScreen() {
           }
           onRegionChangeComplete={(r) => setRegion(r)}
         >
-          {activeLocations.map((loc) => (
+          {/* ✅ MI ubicación (avatar o iniciales) */}
+          {myCoords && (
+            <Marker
+              coordinate={{ latitude: myCoords.latitude, longitude: myCoords.longitude }}
+              anchor={{ x: 0.5, y: 0.5 }}
+            >
+              {renderUserMarkerAvatar(myUserId)}
+            </Marker>
+          )}
+
+          {/* ✅ Otros usuarios activos (avatar o iniciales) */}
+          {otherLocations.map((loc) => (
             <Marker
               key={loc.userId}
               coordinate={{ latitude: loc.latitude, longitude: loc.longitude }}
-              title={getUserLabel(loc.userId)}
-              description={loc.isLive ? 'Ubicación en vivo' : 'Ubicación reciente'}
-              pinColor={loc.userId === myUserId ? '#2b69a6' : '#0b2b52'}
-            />
+              anchor={{ x: 0.5, y: 0.5 }}
+            >
+              {renderUserMarkerAvatar(loc.userId)}
+            </Marker>
           ))}
         </MapView>
 
         {/* ✅ Status pill */}
-        <View style={s.statusPill}>
-          <Ionicons name={isLiveSharing ? 'radio-outline' : 'time-outline'} size={16} color="#0b2b52" />
-          <Text style={s.statusText}>
-            {isLiveSharing ? `Compartiendo en vivo (${liveMinutes}m)` : 'No estás compartiendo en vivo'}
-          </Text>
-        </View>
-      </View>
-
-      {/* ✅ Controls */}
-      <View style={s.controls}>
-        <View style={s.liveRow}>
-          <Text style={s.liveLabel}>Live:</Text>
-
-          <Pressable
-            style={[s.liveChip, liveMinutes === 15 && s.liveChipActive]}
-            onPress={() => setLiveMinutes(15)}
-          >
-            <Text style={[s.liveChipText, liveMinutes === 15 && s.liveChipTextActive]}>15m</Text>
-          </Pressable>
-
-          <Pressable
-            style={[s.liveChip, liveMinutes === 60 && s.liveChipActive]}
-            onPress={() => setLiveMinutes(60)}
-          >
-            <Text style={[s.liveChipText, liveMinutes === 60 && s.liveChipTextActive]}>1h</Text>
-          </Pressable>
-
-          <Pressable
-            style={[s.liveChip, liveMinutes === 480 && s.liveChipActive]}
-            onPress={() => setLiveMinutes(480)}
-          >
-            <Text style={[s.liveChipText, liveMinutes === 480 && s.liveChipTextActive]}>8h</Text>
-          </Pressable>
-        </View>
-
-        <View style={s.actionsRow}>
-          <Pressable style={s.primaryBtn} onPress={shareOnce}>
-            <Ionicons name="send-outline" size={16} color="#fff" />
-            <Text style={s.primaryBtnText}>Compartir ubicación</Text>
-          </Pressable>
-
-          {!isLiveSharing ? (
-            <Pressable style={s.secondaryBtn} onPress={startLiveSharing}>
-              <Ionicons name="radio-outline" size={16} color="#0b2b52" />
-              <Text style={s.secondaryBtnText}>Compartir en vivo</Text>
-            </Pressable>
-          ) : (
-            <Pressable style={s.dangerBtn} onPress={stopLiveSharing}>
-              <Ionicons name="stop-circle-outline" size={16} color="#fff" />
-              <Text style={s.dangerBtnText}>Detener</Text>
-            </Pressable>
-          )}
-        </View>
-
-        {!hasLocationPerm && (
-          <Pressable style={s.permBtn} onPress={ensureLocationPermission}>
-            <Ionicons name="lock-open-outline" size={16} color="#0b2b52" />
-            <Text style={s.permBtnText}>Habilitar permisos de ubicación</Text>
-          </Pressable>
+        {!hasLocationPerm ? (
+          <View style={s.statusPill}>
+            <Ionicons name="lock-closed-outline" size={16} color="#0b2b52" />
+            <Text style={s.statusText}>Permite ubicación para mostrar tu posición en el mapa</Text>
+          </View>
+        ) : (
+          <View style={s.statusPill}>
+            <Ionicons name="location-outline" size={16} color="#0b2b52" />
+            <Text style={s.statusText}>Mostrando ubicaciones activas en el mapa</Text>
+          </View>
         )}
       </View>
     </SafeAreaView>
