@@ -2,10 +2,6 @@
 
 import { StyleSheet } from 'react-native';
 
-/**
- * ✅ Estilos profesionales para LocationsScreen
- * - Marcadores: avatar circular o iniciales (fallback tipo chat)
- */
 export const styles = StyleSheet.create({
   safe: {
     flex: 1,
@@ -80,63 +76,169 @@ export const styles = StyleSheet.create({
   },
 
   /**
-   * ✅ Marker: avatar
-   * - Contenedor circular con sombra
+   * ✅ Marker (flecha + label)
    */
-  markerAvatarWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.96)',
+  markerWrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
-
-    // iOS shadow
-    shadowColor: '#0b2b52',
-    shadowOpacity: 0.20,
-    shadowRadius: 7,
-    shadowOffset: { width: 0, height: 3 },
-
-    // Android shadow
-    elevation: 5,
-
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.75)',
   },
 
-  markerAvatarImg: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    resizeMode: 'cover',
+  markerArrowWrap: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.90)',
+    shadowColor: '#0b2b52',
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
+  },
+
+  markerLabelWrap: {
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    shadowColor: '#0b2b52',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+    maxWidth: 140,
+  },
+
+  markerLabelText: {
+    color: '#0b2b52',
+    fontSize: 12,
+    fontWeight: '900',
   },
 
   /**
-   * ✅ Marker: iniciales (fallback tipo chat)
+   * ✅ Modal
    */
-  markerInitialsWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(43,105,166,0.95)', // corporativo azul
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
-
-    shadowColor: '#0b2b52',
-    shadowOpacity: 0.20,
-    shadowRadius: 7,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 5,
-
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.75)',
+    padding: 18,
   },
 
-  markerInitialsText: {
+  modalCard: {
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: 16,
+    backgroundColor: '#fff',
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.08)',
+  },
+
+  modalTitle: {
+    color: '#0b2b52',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(11,43,82,0.06)',
+  },
+
+  modalBody: {
+    paddingTop: 12,
+    gap: 10,
+  },
+
+  modalRow: {
+    gap: 4,
+  },
+
+  modalLabel: {
+    color: 'rgba(11,43,82,0.65)',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+
+  modalValue: {
+    color: '#0b2b52',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+
+  /**
+   * ✅ Link style (solo teléfono)
+   */
+  modalValueLink: {
+    color: '#0b2b52',
+    fontSize: 14,
+    fontWeight: '900',
+    textDecorationLine: 'underline',
+  },
+
+  /**
+   * ✅ Fila del teléfono: icono + número
+   */
+  phoneRowPressable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  /**
+   * ✅ Acciones del modal (Chat)
+   */
+  modalActions: {
+    marginTop: 8,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.08)',
+  },
+
+  chatActionBtn: {
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#2b69a6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+
+  chatActionBtnDisabled: {
+    backgroundColor: 'rgba(43,105,166,0.45)',
+  },
+
+  chatActionText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: '900',
-    letterSpacing: 0.5,
+  },
+
+  chatActionTextDisabled: {
+    color: 'rgba(255,255,255,0.75)',
   },
 });

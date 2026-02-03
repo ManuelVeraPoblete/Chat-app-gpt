@@ -1,7 +1,7 @@
 // src/presentation/screens/Locations/LocationsScreen.tsx
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Image, Platform, Pressable, Text, View } from 'react-native';
+import { Alert, Linking, Modal, Platform, Pressable, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,18 +24,24 @@ import { styles as s } from './LocationsScreen.styles';
 
 type UserMini = {
   displayName: string;
-  avatarUrl?: string | null;
+  email?: string | null;
+  phone?: string | null;
+};
+
+type SelectedUser = {
+  userId: string;
+  displayName: string;
+  email: string | null;
+  phone: string | null;
 };
 
 /**
- * ✅ LocationsScreen
- * - Muestra la ubicación de todos los usuarios activos en el mapa (API).
- * - Muestra MI ubicación local (GPS) aunque yo no esté compartiendo.
- * - Marcadores:
- *    - Foto de perfil si existe
- *    - Si no existe: círculo con iniciales (como en chat)
- *
- * Nota: Footer de compartir ubicación fue removido.
+ * ✅ LocationsScreen (FRONT)
+ * - Flechas: verde (yo) / rojo (otros)
+ * - Tap en flecha => Modal con info
+ * - Teléfono: clickeable (dialer nativo)
+ * - Correo: texto normal (sin link)
+ * - Botón/Link "Chat": abre pantalla de chat con ese usuario
  */
 export function LocationsScreen() {
   const navigation = useNavigation();
@@ -69,23 +75,66 @@ export function LocationsScreen() {
   const [hasLocationPerm, setHasLocationPerm] = useState<boolean>(false);
   const [myCoords, setMyCoords] = useState<{ latitude: number; longitude: number } | null>(null);
 
+  // ✅ Modal
+  const [selectedUser, setSelectedUser] = useState<SelectedUser | null>(null);
+  const closeModal = useCallback(() => setSelectedUser(null), []);
+
   /**
-   * ✅ Helpers: iniciales tipo chat
+   * ✅ Utils: sanitizar teléfono y abrir apps nativas
    */
-  const buildInitials = useCallback((name: string) => {
-    const clean = (name ?? '').trim().replace(/\s+/g, ' ');
-    if (!clean) return '?';
+  const sanitizePhone = useCallback((raw: string) => raw.replace(/[^\d+]/g, ''), []);
 
-    const parts = clean.split(' ').filter(Boolean);
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  const openNativePhoneDialer = useCallback(
+    async (rawPhone: string) => {
+      const phone = sanitizePhone(rawPhone);
 
-    const first = parts[0]?.[0] ?? '';
-    const last = parts[parts.length - 1]?.[0] ?? '';
-    return `${first}${last}`.toUpperCase();
-  }, []);
+      if (!phone) {
+        Alert.alert('Teléfono inválido', 'El número no tiene un formato válido.');
+        return;
+      }
+
+      const url = `tel:${phone}`;
+      const can = await Linking.canOpenURL(url);
+
+      if (!can) {
+        Alert.alert('No disponible', 'No se pudo abrir la app de Teléfono en este dispositivo.');
+        return;
+      }
+
+      await Linking.openURL(url);
+    },
+    [sanitizePhone],
+  );
 
   /**
-   * ✅ Carga usuarios para mostrar nombre/avatar en los markers
+   * ✅ Abrir chat con un usuario (navegación)
+   * IMPORTANTE:
+   * - Ajusta "Chat" por el nombre real de tu ruta si difiere (ej: Routes.Chat).
+   * - Ajusta los params según tu ChatScreen.
+   */
+  const openChatWithUser = useCallback(
+    (user: SelectedUser) => {
+      if (!user?.userId) return;
+
+      if (user.userId === myUserId) {
+        Alert.alert('Acción no disponible', 'No puedes abrir un chat contigo mismo.');
+        return;
+      }
+
+      closeModal();
+
+      // ✅ Navegación: usa el nombre real de tu screen de chat
+      // Si tu app usa Routes.Chat, reemplaza 'Chat' por Routes.Chat.
+      (navigation as any).navigate('Chat', {
+        userId: user.userId,
+        displayName: user.displayName,
+      });
+    },
+    [closeModal, myUserId, navigation],
+  );
+
+  /**
+   * ✅ Carga usuarios para nombre/correo/teléfono en modal
    */
   useEffect(() => {
     (async () => {
@@ -93,22 +142,23 @@ export function LocationsScreen() {
         const users = await usersUseCase.execute();
 
         const map: Record<string, UserMini> = {};
-        for (const u of users) {
+        for (const u of users as any[]) {
           map[u.id] = {
             displayName: u.displayName,
-            // ✅ Si existe en tu entidad AppUser (según tu historial), lo guardamos
-            avatarUrl: (u as any).avatarUrl ?? null,
+            email: u.email ?? null,
+            phone: u.phone ?? null,
           };
         }
+
         setUsersById(map);
       } catch {
-        // No bloqueamos UX si falla. Se verá un fallback con iniciales/id corto.
+        // UX degrade suave
       }
     })();
   }, [usersUseCase]);
 
   /**
-   * ✅ Permisos de ubicación (foreground)
+   * ✅ Permisos de ubicación
    */
   const ensureLocationPermission = useCallback(async (): Promise<boolean> => {
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -123,7 +173,7 @@ export function LocationsScreen() {
   }, []);
 
   /**
-   * ✅ Obtener coordenadas actuales
+   * ✅ Coordenadas actuales
    */
   const getCurrentCoords = useCallback(async () => {
     const ok = await ensureLocationPermission();
@@ -140,7 +190,7 @@ export function LocationsScreen() {
   }, [ensureLocationPermission]);
 
   /**
-   * ✅ Centrar mapa al abrir (si hay permisos)
+   * ✅ Centrar mapa al abrir
    */
   useEffect(() => {
     (async () => {
@@ -163,7 +213,7 @@ export function LocationsScreen() {
   }, []);
 
   /**
-   * ✅ Mantener MI ubicación actualizada (solo para mostrar en el mapa)
+   * ✅ Mantener MI ubicación actualizada
    */
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | null = null;
@@ -188,7 +238,7 @@ export function LocationsScreen() {
   }, [getCurrentCoords, hasLocationPerm]);
 
   /**
-   * ✅ Polling de usuarios conectados (ubicación reciente)
+   * ✅ Polling de ubicaciones activas
    */
   const fetchActive = useCallback(async () => getActiveUseCase.execute(120), [getActiveUseCase]);
 
@@ -199,7 +249,6 @@ export function LocationsScreen() {
     onData: (data) => {
       setActiveLocations(data);
 
-      // ✅ Fallback: si NO se pudo centrar por permisos, centra al primer activo.
       if (!region && data.length > 0) {
         const first = data[0];
         const initial: Region = {
@@ -217,19 +266,17 @@ export function LocationsScreen() {
   /**
    * ✅ Helpers UI
    */
-  const getDisplayName = useCallback(
-    (userId: string) => {
-      if (userId === myUserId) return 'Tu';
-      return usersById[userId]?.displayName ?? userId.slice(0, 8);
+  const getUserInfo = useCallback(
+    (userId: string): SelectedUser => {
+      const info = usersById[userId];
+
+      const displayName = userId === myUserId ? 'Tu' : info?.displayName ?? userId.slice(0, 8);
+      const email = info?.email ?? null;
+      const phone = info?.phone ?? null;
+
+      return { userId, displayName, email, phone };
     },
     [myUserId, usersById],
-  );
-
-  const getAvatarUrl = useCallback(
-    (userId: string) => {
-      return usersById[userId]?.avatarUrl ?? null;
-    },
-    [usersById],
   );
 
   const centerOnMe = useCallback(async () => {
@@ -249,48 +296,36 @@ export function LocationsScreen() {
     requestAnimationFrame(() => mapRef.current?.animateToRegion(next, 450));
   }, [getCurrentCoords]);
 
-  /**
-   * ✅ Normalizamos markers:
-   * - Mi marker se toma desde GPS local (myCoords) si existe.
-   * - Los demás vienen desde activeLocations (excluyendo miUserId para no duplicar).
-   */
   const otherLocations = useMemo(
     () => activeLocations.filter((l) => l.userId !== myUserId),
     [activeLocations, myUserId],
   );
 
   /**
-   * ✅ Render del avatar del marker:
-   * - Si hay avatarUrl => imagen
-   * - Si no => iniciales
+   * ✅ Marker: flecha (tap => modal)
    */
-  const renderUserMarkerAvatar = useCallback(
-    (userId: string) => {
-      const name = getDisplayName(userId);
-      const avatarUrl = getAvatarUrl(userId);
-
-      // ✅ Si hay foto: se muestra la imagen
-      if (avatarUrl) {
-        return (
-          <View style={s.markerAvatarWrap}>
-            <Image source={{ uri: avatarUrl }} style={s.markerAvatarImg} />
-          </View>
-        );
-      }
-
-      // ✅ Si no hay foto: círculo con iniciales (como chat)
-      const initials = buildInitials(name);
+  const renderArrowMarker = useCallback(
+    (userId: string, isMe: boolean) => {
+      const color = isMe ? '#22c55e' : '#ef4444';
 
       return (
-        <View style={s.markerInitialsWrap}>
-          <Text style={s.markerInitialsText} numberOfLines={1}>
-            {initials}
-          </Text>
-        </View>
+        <Pressable onPress={() => setSelectedUser(getUserInfo(userId))} style={s.markerWrap} hitSlop={10}>
+          <View style={s.markerArrowWrap}>
+            <Ionicons name="navigate" size={30} color={color} />
+          </View>
+
+          <View style={s.markerLabelWrap}>
+            <Text style={s.markerLabelText} numberOfLines={1}>
+              {getUserInfo(userId).displayName}
+            </Text>
+          </View>
+        </Pressable>
       );
     },
-    [buildInitials, getAvatarUrl, getDisplayName],
+    [getUserInfo],
   );
+
+  const isChatEnabled = selectedUser?.userId && selectedUser.userId !== myUserId;
 
   return (
     <SafeAreaView style={[s.safe, { paddingTop: insets.top }]} edges={['top']}>
@@ -326,24 +361,26 @@ export function LocationsScreen() {
           }
           onRegionChangeComplete={(r) => setRegion(r)}
         >
-          {/* ✅ MI ubicación (avatar o iniciales) */}
+          {/* ✅ MI ubicación (flecha verde) */}
           {myCoords && (
             <Marker
               coordinate={{ latitude: myCoords.latitude, longitude: myCoords.longitude }}
-              anchor={{ x: 0.5, y: 0.5 }}
+              anchor={{ x: 0.5, y: 1 }}
+              onPress={() => setSelectedUser(getUserInfo(myUserId))}
             >
-              {renderUserMarkerAvatar(myUserId)}
+              {renderArrowMarker(myUserId, true)}
             </Marker>
           )}
 
-          {/* ✅ Otros usuarios activos (avatar o iniciales) */}
+          {/* ✅ Otros usuarios (flecha roja) */}
           {otherLocations.map((loc) => (
             <Marker
               key={loc.userId}
               coordinate={{ latitude: loc.latitude, longitude: loc.longitude }}
-              anchor={{ x: 0.5, y: 0.5 }}
+              anchor={{ x: 0.5, y: 1 }}
+              onPress={() => setSelectedUser(getUserInfo(loc.userId))}
             >
-              {renderUserMarkerAvatar(loc.userId)}
+              {renderArrowMarker(loc.userId, false)}
             </Marker>
           ))}
         </MapView>
@@ -357,10 +394,78 @@ export function LocationsScreen() {
         ) : (
           <View style={s.statusPill}>
             <Ionicons name="location-outline" size={16} color="#0b2b52" />
-            <Text style={s.statusText}>Mostrando ubicaciones activas en el mapa</Text>
+            <Text style={s.statusText}>Toca una flecha para ver datos del usuario</Text>
           </View>
         )}
       </View>
+
+      {/* ✅ Modal de usuario */}
+      <Modal visible={Boolean(selectedUser)} transparent animationType="fade" onRequestClose={closeModal}>
+        <Pressable style={s.modalBackdrop} onPress={closeModal}>
+          <Pressable style={s.modalCard} onPress={() => {}}>
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Información del usuario</Text>
+              <Pressable onPress={closeModal} hitSlop={10} style={s.modalCloseBtn}>
+                <Ionicons name="close" size={18} color="#0b2b52" />
+              </Pressable>
+            </View>
+
+            <View style={s.modalBody}>
+              <View style={s.modalRow}>
+                <Text style={s.modalLabel}>Nombre</Text>
+                <Text style={s.modalValue} numberOfLines={2}>
+                  {selectedUser?.displayName ?? '—'}
+                </Text>
+              </View>
+
+              {/* ✅ Correo SIN link */}
+              <View style={s.modalRow}>
+                <Text style={s.modalLabel}>Correo</Text>
+                <Text style={s.modalValue} numberOfLines={2}>
+                  {selectedUser?.email ?? '—'}
+                </Text>
+              </View>
+
+              {/* ✅ Teléfono con ícono + link al dialer */}
+              <View style={s.modalRow}>
+                <Text style={s.modalLabel}>Teléfono</Text>
+
+                {selectedUser?.phone ? (
+                  <Pressable
+                    onPress={() => void openNativePhoneDialer(selectedUser.phone!)}
+                    hitSlop={10}
+                    style={s.phoneRowPressable}
+                  >
+                    <Ionicons name="call-outline" size={16} color="#0b2b52" />
+                    <Text style={s.modalValueLink} numberOfLines={2}>
+                      {selectedUser.phone}
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <Text style={s.modalValue} numberOfLines={2}>
+                    —
+                  </Text>
+                )}
+              </View>
+
+              {/* ✅ Link/Botón de Chat */}
+              <View style={s.modalActions}>
+                <Pressable
+                  disabled={!isChatEnabled}
+                  onPress={() => selectedUser && openChatWithUser(selectedUser)}
+                  style={[s.chatActionBtn, !isChatEnabled && s.chatActionBtnDisabled]}
+                  hitSlop={10}
+                >
+                  <Ionicons name="chatbubble-ellipses-outline" size={18} color={isChatEnabled ? '#fff' : 'rgba(255,255,255,0.7)'} />
+                  <Text style={[s.chatActionText, !isChatEnabled && s.chatActionTextDisabled]}>
+                    Abrir chat
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
