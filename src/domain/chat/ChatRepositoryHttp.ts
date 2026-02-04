@@ -1,113 +1,122 @@
-import { ENV } from '../../core/config/env';
-import type { HttpClient } from '../../core/http/HttpClient';
+// src/domain/chat/ChatRepositoryHttp.ts
 
+import { ENV } from '../../core/config/env';
+import { HttpClient } from '../../core/http/HttpClient';
+
+import type { ChatRepository } from './repositories/ChatRepository';
 import type {
   ChatHistory,
   SendChatMessagePayload,
   SendMessageResult,
-} from '../../domain/chat/entities/ChatMessage';
-import type { ChatRepository } from '../../domain/chat/repositories/ChatRepository';
+} from './entities/ChatMessage';
 
 /**
- * Implementación HTTP del repositorio de chat.
+ * ✅ ChatRepositoryHttp
  *
- * ✅ Usa el HttpClient autorizado (ApiContext) por lo que:
- * - agrega Authorization automáticamente
- * - refresca token si recibe 401
+ * Implementación HTTP del repositorio de Chat.
+ * Compatible con el HttpClient actual (headers tipados como string).
+ * Solución profesional al error:
+ * ❌ Type '{ "Content-Type": string }' is not assignable to type 'string'
  *
- * ✅ Soporta:
- * - Texto (JSON)
- * - Ubicación (JSON o multipart)
- * - Archivos/Imágenes (multipart/form-data)
+ * 👉 NO se pasan headers como objeto.
+ * 👉 El HttpClient detecta FormData y setea headers internamente.
  */
 export class ChatRepositoryHttp implements ChatRepository {
   constructor(private readonly http: HttpClient) {}
 
-  async getMessages(peerId: string, limit: number = 200): Promise<ChatHistory> {
-    // GET /chat/:peerId/messages?limit=200
+  /**
+   * ✅ Obtener historial de mensajes
+   * GET /chat/:peerId/messages
+   */
+  async getMessages(peerId: string, limit = 200): Promise<ChatHistory> {
     const path = `${ENV.CHAT_PATH}/${peerId}/messages?limit=${limit}`;
     return this.http.request<ChatHistory>(path, 'GET');
   }
 
   /**
-   * ✅ Overloads (Clean Architecture)
-   * - Mantiene compatibilidad con la versión antigua (texto)
-   * - Agrega soporte PRO: payload (texto + adjuntos + ubicación)
+   * ✅ Enviar mensaje simple (texto)
    */
   async sendMessage(peerId: string, text: string): Promise<SendMessageResult>;
-  async sendMessage(peerId: string, payload: SendChatMessagePayload): Promise<SendMessageResult>;
+
+  /**
+   * ✅ Enviar mensaje PRO (texto + adjuntos + ubicación)
+   */
+  async sendMessage(
+    peerId: string,
+    payload: SendChatMessagePayload,
+  ): Promise<SendMessageResult>;
+
   async sendMessage(
     peerId: string,
     input: string | SendChatMessagePayload,
   ): Promise<SendMessageResult> {
     const path = `${ENV.CHAT_PATH}/${peerId}/messages`;
 
-    // ✅ Compatibilidad: sendMessage(peerId, "hola")
+    // ==============================
+    // ✅ TEXTO SIMPLE (JSON)
+    // ==============================
     if (typeof input === 'string') {
-      const safeText = input.trim();
-      if (!safeText) return { created: [] };
-
-      return this.http.request<SendMessageResult, { text: string }>(path, 'POST', {
-        text: safeText,
-      });
-    }
-
-    // ✅ Nuevo formato PRO: sendMessage(peerId, { text, attachments, location })
-    const safeText = (input.text ?? '').trim();
-    const hasFiles = (input.attachments?.length ?? 0) > 0;
-    const hasLocation = Boolean(input.location);
-
-    // ✅ No enviamos requests vacíos
-    if (!safeText && !hasFiles && !hasLocation) {
-      return { created: [] };
-    }
-
-    /**
-     * ✅ Caso 1: Sin archivos => JSON
-     * (ideal para ubicación + texto)
-     */
-    if (!hasFiles) {
-      return this.http.request<SendMessageResult, { text: string; location?: any }>(path, 'POST', {
-        text: safeText,
-        location: input.location,
-      });
-    }
-
-    /**
-     * ✅ Caso 2: Con archivos => multipart/form-data
-     * Campo esperado en backend: "files"
-     *
-     * 📌 Importante:
-     * - En multipart, los campos llegan como string (por eso location va como JSON string).
-     */
-    const form = new FormData();
-
-    // ✅ Texto es opcional (puede ser adjuntos-only)
-    form.append('text', safeText);
-
-    // ✅ Ubicación (si viene) como JSON string
-    if (input.location) {
-      form.append('location', JSON.stringify(input.location));
-    }
-
-    // ✅ Archivos/Imágenes
-    for (const att of input.attachments ?? []) {
-      form.append(
-        'files',
-        {
-          uri: att.uri,
-          name: att.name,
-          type: att.mimeType,
-        } as any,
+      return this.http.request<SendMessageResult, { text: string }>(
+        path,
+        'POST',
+        { text: input },
       );
     }
 
+    // ==============================
+    // ✅ MENSAJE PRO (multipart/form-data)
+    // ==============================
+    const formData = new FormData();
+
+    if (input.text) {
+      formData.append('text', input.text);
+    }
+
+    if (input.location) {
+      formData.append('location', JSON.stringify(input.location));
+    }
+
+    if (input.attachments?.length) {
+      for (const file of input.attachments) {
+        formData.append('files', file as any);
+      }
+    }
+
     /**
-     * ✅ IMPORTANTE:
-     * NO mandamos Content-Type manual en multipart.
-     * El boundary lo genera fetch automáticamente.
-     * (En el siguiente archivo ajustaremos el HttpClient para soportar FormData)
+     * 🚨 IMPORTANTE
+     * NO se setea 'Content-Type' manualmente.
+     *
+     * - fetch / axios lo calculan automáticamente
+     * - evita errores de boundary
+     * - evita el error de tipado que tienes ahora
      */
-    return this.http.request<SendMessageResult, any>(path, 'POST', form as any, {});
+    return this.http.request<SendMessageResult>(
+      path,
+      'POST',
+      formData,
+    );
+  }
+
+  /**
+   * ✅ Obtener conteo de mensajes NO LEÍDOS por peer
+   *
+   * POST /chat/unread-counts
+   *
+   * Body:
+   * { peerIds: string[] }
+   */
+  async getUnreadCounts(peerIds: string[]): Promise<Record<string, number>> {
+    const path = `${ENV.CHAT_PATH}/unread-counts`;
+
+    const payload = {
+      peerIds: Array.from(new Set(peerIds)).filter(Boolean),
+    };
+
+    const response = await this.http.request<
+      { counts: Record<string, number> },
+      typeof payload
+    >(path, 'POST', payload);
+
+    return response?.counts ?? {};
   }
 }

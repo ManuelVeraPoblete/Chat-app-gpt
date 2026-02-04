@@ -11,6 +11,11 @@ export type ChatRow = {
 
   lastMessage?: string;
   lastMessageAt?: Date;
+
+  /**
+   * ✅ Badge de no-leídos (Home)
+   */
+  unreadCount?: number;
 };
 
 type Props = {
@@ -24,6 +29,8 @@ export function ChatListItem({ user, onPress }: Props) {
     return formatTime(user.lastMessageAt);
   }, [user.lastMessageAt]);
 
+  const unread = Math.max(0, Number(user.unreadCount ?? 0));
+
   return (
     <Pressable onPress={onPress} style={styles.row}>
       <AvatarCircle name={user.displayName} size={54} badge="online" />
@@ -34,7 +41,17 @@ export function ChatListItem({ user, onPress }: Props) {
             {user.displayName}
           </Text>
 
-          <Text style={styles.time}>{timeLabel}</Text>
+          <View style={styles.metaRight}>
+            <Text style={styles.time}>{timeLabel}</Text>
+
+            {unread > 0 ? (
+              <View style={styles.unreadBadge}>
+                <Text style={styles.unreadText} numberOfLines={1}>
+                  {unread > 99 ? '99+' : String(unread)}
+                </Text>
+              </View>
+            ) : null}
+          </View>
         </View>
 
         <Text numberOfLines={1} style={styles.preview}>

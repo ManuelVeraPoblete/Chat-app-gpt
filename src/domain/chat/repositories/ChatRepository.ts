@@ -14,6 +14,12 @@ export interface ChatRepository {
   getMessages(peerId: string, limit?: number): Promise<ChatHistory>;
 
   /**
+   * ✅ Obtiene conteo de mensajes no-leídos por peer (Home)
+   * Devuelve un map { [peerId]: count }
+   */
+  getUnreadCounts(peerIds: string[]): Promise<Record<string, number>>;
+
+  /**
    * ✅ Enviar mensaje (compatibilidad + versión PRO)
    *
    * 📌 Compatibilidad:

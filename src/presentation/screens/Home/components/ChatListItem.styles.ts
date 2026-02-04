@@ -30,10 +30,32 @@ export const styles = StyleSheet.create({
     color: '#0c3f78',
   },
 
+  metaRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
   time: {
     fontSize: 16,
     fontWeight: '700',
     color: 'rgba(20, 70, 120, 0.55)',
+  },
+
+  unreadBadge: {
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1d7ef2', // azul corporativo
+  },
+
+  unreadText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#ffffff',
   },
 
   preview: {

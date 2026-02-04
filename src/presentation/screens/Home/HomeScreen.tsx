@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, FlatList, RefreshControl, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { styles } from './HomeScreen.styles';
@@ -14,6 +14,10 @@ import { useAuth } from '../../../state/auth/AuthContext';
 import { UsersRepositoryHttp } from '../../../data/users/UsersRepositoryHttp';
 import { GetUsersUseCase } from '../../../domain/users/usecases/GetUsersUseCase';
 
+// ✅ IMPORT CORRECTO (ARREGLA EL ERROR)
+import { ChatRepositoryHttp } from '../../../domain/chat/ChatRepositoryHttp';
+import { GetUnreadCountsUseCase } from '../../../domain/chat/usecases/GetUnreadCountsUseCase';
+
 import { HomeHeader } from './components/HomeHeader';
 import { ChatListItem, type ChatRow } from './components/ChatListItem';
 
@@ -21,41 +25,36 @@ import { Routes } from '../../navigation/routes';
 import type { RootStackParamList } from '../../navigation/AppNavigator';
 
 /**
- * ✅ Regla de negocio solicitada:
- * El primer usuario debe ser exactamente "Asistente Corporativo"
+ * ✅ Regla de negocio:
+ * El primer usuario debe ser el asistente corporativo
  */
 const FIRST_USER_NAME = 'Asistente Corporativo';
 
 export function HomeScreen() {
   const { http } = useApi();
-
-  /**
-   * ✅ Sesión actual (para ocultar al usuario logueado)
-   * ✅ logout() limpia tokens y session
-   */
   const { session, logout } = useAuth();
 
-  /**
-   * ✅ Navegación tipada
-   */
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const [query, setQuery] = useState('');
   const [rows, setRows] = useState<ChatRow[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  /**
-   * ✅ UseCase (Clean Architecture):
-   * UI no sabe de HTTP ni endpoints.
-   */
+  // ==============================
+  // ✅ USE CASES (Clean Architecture)
+  // ==============================
   const getUsersUseCase = useMemo(() => {
-    const repo = new UsersRepositoryHttp(http);
-    return new GetUsersUseCase(repo);
+    return new GetUsersUseCase(new UsersRepositoryHttp(http));
   }, [http]);
 
-  /**
-   * ✅ Cargar lista de usuarios desde la BD
-   */
+  const getUnreadCountsUseCase = useMemo(() => {
+    return new GetUnreadCountsUseCase(new ChatRepositoryHttp(http));
+  }, [http]);
+
+  // ==============================
+  // ✅ CARGA PRINCIPAL
+  // ==============================
   const loadUsers = useCallback(async () => {
     setRefreshing(true);
 
@@ -63,70 +62,71 @@ export function HomeScreen() {
       const users = await getUsersUseCase.execute();
       const myId = session?.user?.id;
 
-      /**
-       * ✅ Regla solicitada:
-       * ❌ NO mostrar el usuario logueado en la lista
-       */
-      const filteredUsers = myId ? users.filter((u) => u.id !== myId) : users;
+      const filtered = myId ? users.filter((u) => u.id !== myId) : users;
 
-      /**
-       * ✅ Convertimos usuarios de BD a filas tipo chat
-       */
-      const mapped: ChatRow[] = filteredUsers.map((u) => {
-        // ✅ Subtítulo corporativo: Sección • Cargo, si no existe, muestra teléfono.
-        const subtitle =
+      const mapped: ChatRow[] = filtered.map((u) => ({
+        id: u.id,
+        email: u.email,
+        displayName: u.displayName,
+        avatarUrl: u.avatarUrl ?? null,
+        lastMessage:
           [u.companySection, u.jobTitle].filter(Boolean).join(' • ') ||
           u.phone ||
-          'Sin información';
+          'Sin información',
+        lastMessageAt: new Date(),
+        unreadCount: 0,
+      }));
 
-        return {
-          id: u.id,
-          email: u.email,
-          displayName: u.displayName,
-          avatarUrl: u.avatarUrl ?? null,
+      const sorted = mapped.sort(sortChatRows);
 
-          // ✅ Esta línea ya no será "Escribele un mensaje..."
-          lastMessage: subtitle,
+      // ✅ USO CORRECTO DEL USE CASE
+      const counts = await getUnreadCountsUseCase.execute(
+        sorted.map((r) => r.id),
+      );
 
-          lastMessageAt: new Date(),
-        };
-      });
-
-      /**
-       * ✅ Ordenar:
-       * 1) "Asistente Corporativo" primero
-       * 2) resto alfabético por displayName
-       */
-      const sorted = mapped.sort((a, b) => sortChatRows(a, b));
-      setRows(sorted);
+      setRows(
+        sorted.map((r) => ({
+          ...r,
+          unreadCount: Number(counts?.[r.id] ?? 0),
+        })),
+      );
     } catch (e: any) {
-      Alert.alert('Error', e?.message ?? 'No se pudieron cargar los usuarios desde la BD');
+      Alert.alert(
+        'Error',
+        e?.message ?? 'No se pudieron cargar los usuarios',
+      );
     } finally {
       setRefreshing(false);
     }
-  }, [getUsersUseCase, session?.user?.id]);
+  }, [getUsersUseCase, getUnreadCountsUseCase, session?.user?.id]);
 
   useEffect(() => {
     loadUsers();
   }, [loadUsers]);
 
-  /**
-   * ✅ Filtro local por nombre o email (buscador)
-   */
+  useFocusEffect(
+    useCallback(() => {
+      loadUsers();
+    }, [loadUsers]),
+  );
+
+  // ==============================
+  // ✅ FILTRO LOCAL
+  // ==============================
   const filteredRows = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return rows;
 
-    return rows.filter((u) => {
-      const name = (u.displayName ?? '').toLowerCase();
-      const email = (u.email ?? '').toLowerCase();
-      return name.includes(q) || email.includes(q);
-    });
+    return rows.filter(
+      (u) =>
+        u.displayName.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q),
+    );
   }, [query, rows]);
 
-  /**
-   * ✅ Abrir chat del usuario seleccionado
-   */
+  // ==============================
+  // ✅ HANDLERS
+  // ==============================
   const handleOpenChat = useCallback(
     (user: ChatRow) => {
       navigation.navigate(Routes.Chat, {
@@ -138,31 +138,24 @@ export function HomeScreen() {
     [navigation],
   );
 
-  /**
-   * ✅ NUEVO: Abrir mapa de conectados
-   */
   const handleOpenLocations = useCallback(() => {
     navigation.navigate(Routes.Locations);
   }, [navigation]);
 
-  /**
-   * ✅ Logout seguro:
-   * - Confirmación
-   * - Limpia sesión/tokens
-   */
   const handleLogout = useCallback(() => {
-    Alert.alert('Cerrar sesión', '¿Quieres cerrar sesión y entrar con otro usuario?', [
+    Alert.alert('Cerrar sesión', '¿Deseas cerrar sesión?', [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Cerrar sesión',
         style: 'destructive',
-        onPress: async () => {
-          await logout();
-        },
+        onPress: logout,
       },
     ]);
   }, [logout]);
 
+  // ==============================
+  // ✅ RENDER
+  // ==============================
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
@@ -170,15 +163,19 @@ export function HomeScreen() {
           currentUserName="CorpChat"
           query={query}
           onChangeQuery={setQuery}
-          onPressLocations={handleOpenLocations} // ✅ NUEVO BOTÓN MAPA
-          onPressLogout={handleLogout} // ✅ LOGOUT
+          onPressLocations={handleOpenLocations}
+          onPressLogout={handleLogout}
         />
 
         <FlatList
           data={filteredRows}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <ChatListItem user={item} onPress={() => handleOpenChat(item)} />}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadUsers} />}
+          renderItem={({ item }) => (
+            <ChatListItem user={item} onPress={() => handleOpenChat(item)} />
+          )}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={loadUsers} />
+          }
           contentContainerStyle={styles.listContent}
         />
       </View>
@@ -186,26 +183,21 @@ export function HomeScreen() {
   );
 }
 
-/**
- * ✅ Orden solicitado
- * 1) "Asistente Corporativo" primero
- * 2) resto ordenado alfabéticamente
- */
+// ==============================
+// ✅ UTILIDADES
+// ==============================
 function sortChatRows(a: ChatRow, b: ChatRow): number {
-  const aIsFirst = normalizeText(a.displayName) === normalizeText(FIRST_USER_NAME);
-  const bIsFirst = normalizeText(b.displayName) === normalizeText(FIRST_USER_NAME);
+  const aIsFirst =
+    a.displayName.trim().toLowerCase() ===
+    FIRST_USER_NAME.toLowerCase();
+  const bIsFirst =
+    b.displayName.trim().toLowerCase() ===
+    FIRST_USER_NAME.toLowerCase();
 
   if (aIsFirst && !bIsFirst) return -1;
   if (!aIsFirst && bIsFirst) return 1;
 
-  return normalizeText(a.displayName).localeCompare(normalizeText(b.displayName), 'es', {
+  return a.displayName.localeCompare(b.displayName, 'es', {
     sensitivity: 'base',
   });
-}
-
-/**
- * ✅ Normaliza texto para comparar sin errores por espacios/mayúsculas
- */
-function normalizeText(value: string): string {
-  return (value ?? '').trim().toLowerCase();
 }
